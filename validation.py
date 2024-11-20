@@ -12,7 +12,7 @@ class SQLValidator:
             "attribute": {"AS": "AS alias", ",": "attribute", "FROM": "FROM", "WHERE": "WHERE"},
             "AS alias": {"attribute": "attribute", "FROM": "FROM"},
             "FROM": {"relation": "relation"},
-            "relation": {"AS": "AS relation", "WHERE": "WHERE", "NATURAL": "NATURAL JOIN", "JOIN": "JOIN"},
+            "relation": {"AS": "AS relation", "WHERE": "WHERE", "NATURAL": "NATURAL JOIN", "JOIN": "JOIN", ";": "Finish"},
             "JOIN": {"relation": "relation ON"},
             "relation ON": {"ON": "ON condition"},
             "ON condition": {"attribute": "condition"},
@@ -57,7 +57,7 @@ def tokenize(query):
     return re.findall(r"[A-Za-z_][A-Za-z0-9_]*|[=><!]+|[0-9]+|,|;|\*", query)
 
 # Contoh penggunaan
-query = "FROM SELECT * users WHERE id = 1;"
+query = "SELECT * FROM relation;"
 tokens = tokenize(query)
 print("Tokens:", tokens)
 
