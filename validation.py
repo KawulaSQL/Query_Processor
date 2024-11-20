@@ -30,7 +30,9 @@ class SQLValidator:
 
     def validate(self, tokens):
         for token in tokens:
-            if token in self.transitions[self.current_state]:
+            if self.current_state == "Finish":
+                break
+            if token in self.transitions.get(self.current_state, {}):
                 self.current_state = self.transitions[self.current_state][token]
             elif re.match(r"[=><!]+", token):
                 self.current_state = "operator"
@@ -57,14 +59,14 @@ def tokenize(query):
     return re.findall(r"[A-Za-z_][A-Za-z0-9_]*|[=><!]+|[0-9]+|,|;|\*", query)
 
 # Contoh penggunaan
-query = "SELECT * FROM relation;"
-tokens = tokenize(query)
-print("Tokens:", tokens)
+# query = "SELECT * FROM relation;"
+# tokens = tokenize(query)
+# print("Tokens:", tokens)
 
-validator = SQLValidator()
+# validator = SQLValidator()
 
-try:
-    validator.validate(tokens)
-    print("Query is valid!")
-except ValueError as e:
-    print(f"Query validation failed: {e}")
+# try:
+#     validator.validate(tokens)
+#     print("Query is valid!")
+# except ValueError as e:
+#     print(f"Query validation failed: {e}")
