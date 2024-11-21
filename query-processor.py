@@ -1,5 +1,8 @@
 from datetime import datetime
 from typing import Generic, TypeVar, List
+from Query_Optimizer import QueryOptimizer
+# from Failure_Recovery.FailureRecoveryManager import FailureRecoveryManager
+# from Concurrency_Control_Manager.ConcurrencyControlManager import ConcurrencyControlManager
 
 # Generic type for Rows<T>
 T = TypeVar('T')
@@ -73,6 +76,16 @@ class QueryProcessor:
         Simulate query optimization.
         Returns an optimized query plan or None if optimization fails.
         """
+        query_optimizer : QueryOptimizer = QueryOptimizer(query)
+        try:
+            parsed_query = query_optimizer.parse()
+            try:
+                optimize_query = query_optimizer.optimize(parsed_query)
+                return optimize_query.query
+            except Exception as e:
+                print(f"ERROR !!! An error occured during query optimizing: {e}")
+        except Exception as e:
+            print(f"ERROR !!! An error occured during query parsing: {e}")
         return None
 
     def _fetch_data(self, query_plan: str) -> Rows:
