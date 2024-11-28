@@ -1,3 +1,6 @@
 [submodule "Query_Optimizer"]
 	path = Query_Optimizer
 	url = https://github.com/KawulaSQL/Query_Optimizer.git
+[submodule "Storage_Manager"]
+	path = Storage_Manager
+	url = https://github.com/KawulaSQL/Storage_Manager.git
