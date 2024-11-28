@@ -1,0 +1,3 @@
+[submodule "Query_Optimizer"]
+	path = Query_Optimizer
+	url = https://github.com/KawulaSQL/Query_Optimizer.git
