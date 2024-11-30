@@ -23,6 +23,7 @@ class QueryProcessor:
         try:
             query_type = self.get_query_type(query)
             
+            success = True
             if query_type == "SELECT":
                 optimizer = QueryOptimizer(query)
                 parsed_result = optimizer.parse()
@@ -40,12 +41,18 @@ class QueryProcessor:
                 
             elif query_type == "CREATE":
                 self.execute_create(query)
-
+            
             else:
                 print(f"Unsupported query type: {query_type}")
 
+                success = False
+
+            return success
+
         except Exception as e:
             print(f"Error processing query: {e}")
+
+            return False
 
     def get_query_type(self, query: str):
         """
