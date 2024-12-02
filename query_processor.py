@@ -4,14 +4,24 @@ sys.path.append('./Storage_Manager')
 
 from Query_Optimizer.QueryOptimizer import QueryOptimizer
 from Query_Optimizer.model.models import QueryTree
+from Concurrency_Control_Manager.ConcurrencyControlManager import ConcurrencyControlManager
+from Concurrency_Control_Manager.models import Operation
+from Concurrency_Control_Manager.models import CCManagerEnums
+from Concurrency_Control_Manager.models import Resource
 from Storage_Manager.StorageManager import StorageManager
 from Storage_Manager.lib.Schema import Schema
 from Storage_Manager.lib.Attribute import Attribute
+import threading
+import time
 
 class QueryProcessor:
     def __init__(self, base_path: str):
         self.base_path = base_path
         self.storage_manager = StorageManager(base_path)
+        self.concurrency_control_manager = ConcurrencyControlManager()
+        self.operations = []
+        self.is_transacting = False
+        self.transact_id = 1
     
     def process_query(self, query: str):
         """
@@ -41,6 +51,12 @@ class QueryProcessor:
                 
             elif query_type == "CREATE":
                 self.execute_create(query)
+
+            elif query_type == "BEGIN TRANSACTION":
+                self.begin_transaction()
+
+            elif query_type == "COMMIT":
+                self.commit()
             
             else:
                 print(f"Unsupported query type: {query_type}")
@@ -69,6 +85,10 @@ class QueryProcessor:
             return "INSERT"
         elif query.startswith("CREATE"):
             return "CREATE"
+        elif query.startswith("BEGIN TRANSACTION"):
+            return "BEGIN TRANSACTION"
+        elif query.startswith("COMMIT"):
+            return "COMMIT"
         else:
             return "UNKNOWN"
 
@@ -82,6 +102,14 @@ class QueryProcessor:
         if query_tree is not None:
             if query_tree.type == 'table':
                 table_name = query_tree.val
+
+                # As Transaction is beginning, operation is starting to be created
+                if self.is_transacting:
+                    la_table = table_name if isinstance(table_name, list[str]) else list(table_name)
+                    operations = self.convert_to_operation(la_table, self.transact_id)
+                    for operation in operations:
+                        self.operations.append(operation)
+
                 print(f"Executing SELECT on table: {table_name}")
                 table_data = self.storage_manager.get_table_data(table_name)
                 
@@ -110,6 +138,13 @@ class QueryProcessor:
             
             parts = statement.split("INSERT INTO")[1].split("VALUES")
             table_name = parts[0].strip()
+
+            # As Transaction is beginning, operation is starting to be created
+            if self.is_transacting:
+                la_table = table_name if isinstance(table_name, list[str]) else list(table_name)
+                operations = self.convert_to_operation(la_table, self.transact_id)
+                for operation in operations:
+                    self.operations.append(operation)
 
             values_str = parts[1].strip()[1:-1]
 
@@ -195,6 +230,43 @@ class QueryProcessor:
             for child in tree.child:
                 self.print_tree(child, level + 1)
 
+    def begin_transaction(self):
+        self.is_transacting = True
+
+    def convert_to_operation(self, table_names: list[str], transact_id: int):
+        """
+        Converting query to an Operation Data
+        """
+        try:
+            if self.is_transacting:
+                operation_liste = []
+                if query.startswith("SELECT"):
+                    for table_name in table_names:
+                        operation_liste.append(Operation(CCManagerEnums.OperationType.R, f"tx{transact_id}", table_name))
+                    return operation_liste
+                elif query.startswith("INSERT"):
+                    for table_name in table_names:
+                        operation_liste.append(Operation(CCManagerEnums.OperationType.W, f"tx{transact_id}", table_name))
+                    return operation_liste
+                # elif query.startswith("UPDATE"):        
+        except Exception as e:
+            print(f"Query error {e}")
+
+    def commit(self):
+        """
+        Commiting all the operations that are being stored
+        """
+        try:
+            transaction = self.concurrency_control_manager.begin_transaction(self.operations)
+            thread = threading.Thread(target=self.concurrency_control_manager.run)
+            thread.start()
+            time.sleep(5)
+            self.concurrency_control_manager.stop()
+            thread.join()
+            self.operations.clear()
+            self.is_transacting = False
+        except Exception as e:
+            print(f"Error: {e}")
 
 # Main program
 if __name__ == "__main__":
