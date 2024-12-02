@@ -265,6 +265,7 @@ class QueryProcessor:
             thread.join()
             self.operations.clear()
             self.is_transacting = False
+            self.transact_id += 1
         except Exception as e:
             print(f"Error: {e}")
 
