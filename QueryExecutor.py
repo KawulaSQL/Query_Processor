@@ -22,7 +22,7 @@ class QueryExecutor:
         self.conccurency_control_manager = ConcurrencyControlManager()
         self.is_transacting = False
         self.operations = []
-        self.transact_id = 1
+        self.transact_id = 0
 
     def execute_select(self, query: str):
         optimizer = QueryOptimizer(query)
