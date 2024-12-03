@@ -62,10 +62,10 @@ class QueryExecutor:
             columns = query_tree.condition.split(',')
             column_mapping = {}
             for col in columns:
-                match = re.match(r'\s*(\S+)\s*(AS)?\s*(\S+)\s*', col.strip(), re.IGNORECASE)
+                match = re.match(r'\s*(\S+)\s+AS\s+(\S+)\s*', col.strip(), re.IGNORECASE)
                 if match:
-                    original = match.group(1)
-                    alias = match.group(3)
+                    original = match.group(1).strip() 
+                    alias = match.group(2).strip() 
                     column_mapping[original] = alias
                 else:
                     column_mapping[col.strip()] = col.strip()
