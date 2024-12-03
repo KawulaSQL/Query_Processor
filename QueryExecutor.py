@@ -141,7 +141,6 @@ class QueryExecutor:
                     if table_data:
                         schema = self.storage_manager.get_table_schema(table_name)
                         table_data = table_data[:limit_value]
-                        self.display_table_data(table_data, schema)
                     else:
                         print(f"No data found in table '{table_name}'.")
                 else:
@@ -169,12 +168,13 @@ class QueryExecutor:
                 schema = self.storage_manager.get_table_schema(table_name)
                 
                 if query_tree.child and query_tree.child[0].type == 'limit':
-                    limit_value = int(query_tree.condition)
+                    limit_value = int(query_tree.child[0].condition)
                     table_data = table_data[:limit_value]
-
-                self.display_projected_data_with_alias(
+                    self.display_projected_data_with_alias(table_data, schema, column_mapping)
+                else:
+                    self.display_projected_data_with_alias(
                     table_data, schema, column_mapping
-                )
+                    )
             else:
                 print(f"No data found in table '{table_name}'.")
 
