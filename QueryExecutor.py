@@ -75,34 +75,33 @@ class QueryExecutor:
 
         :param query: The SQL CREATE query string.
         """
-        try:
-            if query.startswith("CREATE TABLE"):
-                table_name = query.split()[2]
-                
-                columns_section = query.split("(")[1].split(")")[0]
-                columns = columns_section.split(",")
-                
-                attributes = []
-                for col in columns:
-                    col_name, col_type = col.strip().split(" ")
-                    attributes.append(Attribute(col_name, col_type, 10))
-                
-                schema = Schema(attributes)
-                
-                self.storage_manager.create_table(table_name, schema)
-                print(f"Successfully created table: {table_name}")
-                
-                tables = self.storage_manager.list_tables()
-                if table_name in tables:
-                    print(f"Table {table_name} successfully created and found in the storage.")
-                else:
-                    print(f"Error: Table {table_name} was not found after creation.")
-            
-            else:
-                print("Invalid CREATE query format.")
+        schema_match = re.match(r"CREATE TABLE (\w+)\s*\((.+)\)", query, re.IGNORECASE)
         
-        except Exception as e:
-            print(f"Error executing CREATE query: {e}")
+        if not schema_match:
+            print("Error: Invalid CREATE TABLE statement.")
+            return
+
+        table_name = schema_match.group(1).strip()
+        schema_str = schema_match.group(2).strip()
+
+        attributes = []
+        for attribute_str in schema_str.split(','):
+            attribute_str = attribute_str.strip()
+            match = re.match(r"(\w+)\s+(\w+)(?:\((\d+)\))?", attribute_str)
+            if match:
+                name = match.group(1)
+                dtype = match.group(2).lower()
+                size = int(match.group(3)) if match.group(3) else None
+                attributes.append(Attribute(name, dtype, size))
+            else:
+                print(f"Error: Invalid attribute definition '{attribute_str}'")
+                return
+
+        try:
+            self.storage_manager.create_table(table_name, Schema(attributes))
+            print(f"{table_name} successfully created")
+        except ValueError as e :
+            print(e)
 
     def begin_transaction(self):
         print("Transaction started.")
