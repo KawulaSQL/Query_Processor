@@ -131,11 +131,13 @@ class QueryExecutor:
 
     def commit(self):
         print("Transaction committed.")
+        self.transact_id += 1
         begins = self.conccurency_control_manager.begin_transaction(self.operations)
         # implement the concurrency control thingy
         # Implement the logic to commit transaction
 
     def check_for_response(self, operations: list):
+        self.transact_id += 1
         begins = self.conccurency_control_manager.begin_transaction(operations)
         # Implement the concurrency control thingy
         # response = self.conccurency_control_manager.send_response_to_processor(response)
