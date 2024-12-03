@@ -49,19 +49,53 @@ class QueryExecutor:
         """
         Execute the query based on the optimized query tree.
         """
-        if query_tree.type == 'table':
+        if query_tree.type == 'project': 
+            if query_tree.child and query_tree.child[0].type == 'table':
+                table_name = query_tree.child[0].val
+            columns = query_tree.condition.split(',')
+            table_data = self.storage_manager.get_table_data(table_name)
+            if table_data:
+                schema = self.storage_manager.get_table_schema(table_name)
+                self.display_projected_data(table_data, schema, columns)
+            else:
+                print(f"No data found in table '{table_name}'.")
+
+        elif query_tree.type == 'table':
             table_name = query_tree.val
             table_data = self.storage_manager.get_table_data(table_name)
             if table_data:
                 schema = self.storage_manager.get_table_schema(table_name)
-                print(f"Schema metadata for table '{table_name}': {schema}")
                 self.display_table_data(table_data, schema)
             else:
                 print(f"No data found in table '{table_name}'.")
 
+    def display_projected_data(self, table_data, schema, columns):
+        """
+        Display the table data for projected columns (SELECT column1, column2).
+        """
+        column_names = [attr[0] for attr in schema.get_metadata()]
+
+        # Get the indices of the requested columns
+        column_indices = [column_names.index(col.strip()) for col in columns]
+
+        # Filter data to show only the selected columns
+        projected_data = [[row[idx] for idx in column_indices] for row in table_data]
+
+        column_widths = [len(col) for col in columns]
+        for row in projected_data:
+            column_widths = [max(width, len(str(value))) for width, value in zip(column_widths, row)]
+
+        row_format = " | ".join(f"{{:<{width}}}" for width in column_widths)
+        separator = "-+-".join("-" * width for width in column_widths)
+
+        print(row_format.format(*columns))
+        print(separator)
+        for row in projected_data:
+            print(row_format.format(*row))
+
     def display_table_data(self, table_data, schema):
         """
-        Display the table data in a formatted way.
+        Display the full table data (SELECT * FROM table).
         """
         column_names = [attr[0] for attr in schema.get_metadata()]
         column_widths = [len(name) for name in column_names]
@@ -101,6 +135,6 @@ class QueryExecutor:
         attributes = []
         for col in columns:
             col_name, col_type = col.strip().split(" ")
-            attributes.append(col_name)  # Simplified for now
+            attributes.append(col_name)
 
         return table_name, attributes
