@@ -10,6 +10,8 @@ from Storage_Manager.StorageManager import StorageManager
 from Storage_Manager.lib.Schema import Schema
 from Storage_Manager.lib.Attribute import Attribute
 
+import re
+
 class QueryExecutor:
     def __init__(self, base_path: str):
         self.base_path = base_path
@@ -49,14 +51,32 @@ class QueryExecutor:
         """
         Execute the query based on the optimized query tree.
         """
-        if query_tree.type == 'project': 
+        if query_tree.type == 'project':
             if query_tree.child and query_tree.child[0].type == 'table':
                 table_name = query_tree.child[0].val
+            else:
+                print("Error: No valid table node found under project node.")
+                return
+
+            # Parse columns and aliases
             columns = query_tree.condition.split(',')
+            column_mapping = {}
+            for col in columns:
+                match = re.match(r'\s*(\S+)\s*(AS)?\s*(\S+)\s*', col.strip(), re.IGNORECASE)
+                if match:
+                    original = match.group(1)
+                    alias = match.group(3)
+                    column_mapping[original] = alias
+                else:
+                    column_mapping[col.strip()] = col.strip()
+
+            # Get table data and schema
             table_data = self.storage_manager.get_table_data(table_name)
             if table_data:
                 schema = self.storage_manager.get_table_schema(table_name)
-                self.display_projected_data(table_data, schema, columns)
+                self.display_projected_data_with_alias(
+                    table_data, schema, column_mapping
+                )
             else:
                 print(f"No data found in table '{table_name}'.")
 
@@ -89,6 +109,45 @@ class QueryExecutor:
         separator = "-+-".join("-" * width for width in column_widths)
 
         print(row_format.format(*columns))
+        print(separator)
+        for row in projected_data:
+            print(row_format.format(*row))
+
+    def display_projected_data_with_alias(self, table_data, schema, column_mapping):
+        """
+        Display the table data for projected columns (SELECT column1 AS alias1, ...).
+        """
+        column_names = [attr[0] for attr in schema.get_metadata()]
+        column_indices = []
+        # Map original columns to indices
+        for original_column in column_mapping.keys():
+            if original_column in column_names:
+                column_indices.append(column_names.index(original_column))
+            else:
+                print(f"Error: Column '{original_column}' is not in table schema.")
+                return
+
+        # Filter data to show only the selected columns
+        projected_data = [
+            [row[idx] for idx in column_indices] for row in table_data
+        ]
+
+        # Use aliases as headers
+        aliases = list(column_mapping.values())
+        column_widths = [len(alias) for alias in aliases]
+
+        # Calculate column widths based on data
+        for row in projected_data:
+            column_widths = [
+                max(width, len(str(value)))
+                for width, value in zip(column_widths, row)
+            ]
+  
+        # Print table with aliases as headers
+        row_format = " | ".join(f"{{:<{width}}}" for width in column_widths)
+        separator = "-+-".join("-" * width for width in column_widths)
+
+        print(row_format.format(*aliases))
         print(separator)
         for row in projected_data:
             print(row_format.format(*row))
