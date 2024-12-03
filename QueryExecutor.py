@@ -116,7 +116,21 @@ class QueryExecutor:
         """
         Execute the query based on the optimized query tree.
         """
-        if query_tree.type == 'project':
+        if query_tree.type == 'limit':
+            limit_value = int(query_tree.condition)
+            if query_tree.child and query_tree.child[0].type == 'table':
+                table_name = query_tree.child[0].val
+                table_data = self.storage_manager.get_table_data(table_name)
+                if table_data:
+                    schema = self.storage_manager.get_table_schema(table_name)
+                    table_data = table_data[:limit_value]
+                    self.display_table_data(table_data, schema)
+                else:
+                    print(f"No data found in table '{table_name}'.")
+            else:
+                print("Error: No valid table node found under limit node.")
+        
+        elif query_tree.type == 'project':
             if query_tree.child and query_tree.child[0].type == 'table':
                 table_name = query_tree.child[0].val
             else:
@@ -139,6 +153,11 @@ class QueryExecutor:
             table_data = self.storage_manager.get_table_data(table_name)
             if table_data:
                 schema = self.storage_manager.get_table_schema(table_name)
+                
+                if query_tree.condition.isdigit():
+                    limit_value = int(query_tree.condition)
+                    table_data = table_data[:limit_value]
+
                 self.display_projected_data_with_alias(
                     table_data, schema, column_mapping
                 )
@@ -150,6 +169,26 @@ class QueryExecutor:
             table_data = self.storage_manager.get_table_data(table_name)
             if table_data:
                 schema = self.storage_manager.get_table_schema(table_name)
+                
+                if query_tree.condition.isdigit():
+                    limit_value = int(query_tree.condition)
+                    table_data = table_data[:limit_value]
+
+                self.display_table_data(table_data, schema)
+            else:
+                print(f"No data found in table '{table_name}'.")
+
+
+        elif query_tree.type == 'table':
+            table_name = query_tree.val
+            table_data = self.storage_manager.get_table_data(table_name)
+            if table_data:
+                schema = self.storage_manager.get_table_schema(table_name)
+                
+                if query_tree.condition.isdigit():
+                    limit_value = int(query_tree.condition)
+                    table_data = table_data[:limit_value]
+
                 self.display_table_data(table_data, schema)
             else:
                 print(f"No data found in table '{table_name}'.")
