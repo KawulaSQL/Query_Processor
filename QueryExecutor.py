@@ -9,6 +9,9 @@ from Query_Optimizer.model.models import QueryTree
 from Storage_Manager.StorageManager import StorageManager
 from Storage_Manager.lib.Schema import Schema
 from Storage_Manager.lib.Attribute import Attribute
+from Concurrency_Control_Manager.ConcurrencyControlManager import ConcurrencyControlManager
+from Concurrency_Control_Manager.models import Operation
+from Concurrency_Control_Manager.models import CCManagerEnums
 
 import re
 
@@ -16,13 +19,27 @@ class QueryExecutor:
     def __init__(self, base_path: str):
         self.base_path = base_path
         self.storage_manager = StorageManager(base_path)
+        self.conccurency_control_manager = ConcurrencyControlManager()
         self.is_transacting = False
+        self.operations = []
+        self.transact_id = 0
 
     def execute_select(self, query: str):
         optimizer = QueryOptimizer(query)
         parsed_result = optimizer.parse()
         print("Parsed Query Tree:")
         print_tree(parsed_result.query_tree)
+
+        table_name = self.get_table_names(parsed_result.query_tree)
+        operations = self.convert_to_operation_select(table_name, self.transact_id)
+        # response = self.check_for_response(operations)
+
+        # if response.responseType == "Abort":
+        #   return "Execution not allowed"
+
+        if self.is_transacting:
+            for operation in operations:
+                self.operations.append(operation)
 
         optimized_tree = optimizer.optimize(parsed_result.query_tree)
         print("\nOptimized Query Tree:")
@@ -44,10 +61,14 @@ class QueryExecutor:
             parts = statement.split("INSERT INTO")[1].split("VALUES")
             table_name = parts[0].strip()
 
+            operations = self.convert_to_operation_select(table_name, self.transact_id)
+            # response = self.check_for_response(operations)
+
+            # if response.responseType == "Abort":
+            #   return "Execution not allowed"
+
             # As Transaction is beginning, operation is starting to be created
             if self.is_transacting:
-                la_table = table_name if isinstance(table_name, list[str]) else list(table_name)
-                operations = self.convert_to_operation(la_table, self.transact_id)
                 for operation in operations:
                     self.operations.append(operation)
 
@@ -104,12 +125,23 @@ class QueryExecutor:
             print(e)
 
     def begin_transaction(self):
+        self.is_transacting = True
         print("Transaction started.")
         # Implement the logic to begin transaction
 
     def commit(self):
         print("Transaction committed.")
+        self.transact_id += 1
+        begins = self.conccurency_control_manager.begin_transaction(self.operations)
+        # implement the concurrency control thingy
         # Implement the logic to commit transaction
+
+    def check_for_response(self, operations: list):
+        self.transact_id += 1
+        begins = self.conccurency_control_manager.begin_transaction(operations)
+        # Implement the concurrency control thingy
+        # response = self.conccurency_control_manager.send_response_to_processor(response)
+        # return response
 
     def execute_query(self, query_tree: QueryTree):
         """
@@ -185,6 +217,17 @@ class QueryExecutor:
                 self.display_table_data(table_data, schema)
             else:
                 print(f"No data found in table '{table_name}'.")
+
+    def get_table_names(self, query_tree: QueryTree) -> list[str]:
+        """
+        Get all table names queried by user
+        """
+        liste_table = []
+        while query_tree is not None:
+            if query_tree.type == 'table':
+                liste_table.append(query_tree.val)
+            query_tree = query_tree.child[0]
+        return liste_table
 
     def display_projected_data(self, table_data, schema, columns):
         """
@@ -265,3 +308,44 @@ class QueryExecutor:
         print(separator)
         for row in table_data:
             print(row_format.format(*row))
+
+    def parse_insert(self, statement: str):
+        """
+        Parse an INSERT INTO statement.
+        """
+        parts = statement.split("INSERT INTO")[1].split("VALUES")
+        table_name = parts[0].strip()
+        values_str = parts[1].strip()[1:-1]
+        rows = values_str.split('),')
+        values_list = []
+        for row in rows:
+            row_values = row.strip().strip('()').split(',')
+            values_list.append([v.strip() for v in row_values])
+
+        return table_name, values_list
+
+    def parse_create(self, query: str):
+        """
+        Parse a CREATE TABLE statement.
+        """
+        table_name = query.split()[2]
+        columns_section = query.split("(")[1].split(")")[0]
+        columns = columns_section.split(",")
+        attributes = []
+        for col in columns:
+            col_name, col_type = col.strip().split(" ")
+            attributes.append(col_name)  # Simplified for now
+
+        return table_name, attributes
+    
+    def convert_to_operation_select(self, table_name: list[str], transact_id: int):
+        operations = []
+        for table in table_name:
+            operations.append(Operation(CCManagerEnums.OperationType.R, f"tx{transact_id}", table))
+        return operations
+    
+    def convert_to_operation_insert(self, table_name: list[str], transact_id: int):
+        operations = []
+        for table in table_name:
+            operations.append(Operation(CCManagerEnums.OperationType.W, f"tx{transact_id}", table))
+        return operations
