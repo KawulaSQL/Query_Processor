@@ -14,6 +14,7 @@ from Storage_Manager.lib.Attribute import Attribute
 from bang.bangs import ExecutionResult, Rows
 from datetime import datetime
 from typing import Tuple
+from utils.query import get_query_type
 
 import re
 
@@ -30,6 +31,7 @@ class QueryExecutor:
         try:
             optimizer = QueryOptimizer(query)
             parsed_result = optimizer.parse()
+            type = get_query_type(query)
 
             # table_name = self.get_table_names(parsed_result.query_tree)
             # operations = self.convert_to_operation_select(table_name, self.transact_id)
@@ -40,15 +42,16 @@ class QueryExecutor:
 
             optimized_tree = optimizer.optimize(parsed_result.query_tree)
 
-            result_data, schema = self.execute_query(optimized_tree)
+            result_data, schema, columns = self.execute_query(optimized_tree)
 
             timestamp = datetime.now()
-            previous_data = Rows(data=[], rows_count=0, columns=[])
-            new_data = Rows(data=result_data, rows_count=len(result_data), columns=schema)
+            previous_data = Rows(data=[], rows_count=0, schema=[], columns={})
+            new_data = Rows(data=result_data, rows_count=len(result_data), schema=schema, columns=columns)
 
             return ExecutionResult(
                 transaction_id=self.transact_id,
                 timestamp=timestamp,
+                type=type,
                 status="success",
                 query=query,
                 previous_data=previous_data,
@@ -59,6 +62,7 @@ class QueryExecutor:
             return ExecutionResult(
                 transaction_id=self.transact_id,
                 timestamp=datetime.now(),
+                type=type,
                 status="error",
                 query=query,
                 previous_data=Rows(data=[], rows_count=0, columns=[]),
@@ -161,7 +165,7 @@ class QueryExecutor:
         # response = self.conccurency_control_manager.send_response_to_processor(response)
         # return response
 
-    def execute_query(self, query_tree: QueryTree) -> Tuple[list, list]:
+    def execute_query(self, query_tree: QueryTree) -> Tuple[list, list, map]:
         """
         Execute the query based on the optimized query tree and return the result as a list
         along with the schema.
@@ -169,6 +173,7 @@ class QueryExecutor:
         try:
             result_data = []
             schema = []
+            columns = {}
 
             if query_tree.type == 'limit':
                 limit_value = int(query_tree.condition)
@@ -178,6 +183,7 @@ class QueryExecutor:
                     if table_data:
                         schema = self.storage_manager.get_table_schema(table_name)
                         result_data = table_data[:limit_value]
+                        columns = [attr[0] for attr in schema.get_metadata()]
                     else:
                         print(f"No data found in table '{table_name}'.")
                 else:
@@ -198,7 +204,7 @@ class QueryExecutor:
                             print(f"No data found in table '{table_name}'.")
                     else:
                         print("Error: No valid table node found under limit node.")
-                        return [], []
+                        return [], [], {}
 
                 # Parse columns and aliases
                 columns = query_tree.condition.split(',')
@@ -212,6 +218,7 @@ class QueryExecutor:
                     else:
                         column_mapping[col.strip()] = col.strip()
 
+                columns = column_mapping
                 # Get table data and schema
                 table_data = self.storage_manager.get_table_data(table_name)
                 if table_data:
@@ -222,7 +229,7 @@ class QueryExecutor:
                     else:
                         result_data = table_data
 
-                    self.display_projected_data_with_alias(result_data, schema, column_mapping)
+                    # self.display_projected_data_with_alias(result_data, schema, column_mapping)
                 else:
                     print(f"No data found in table '{table_name}'.")
 
@@ -231,18 +238,17 @@ class QueryExecutor:
                 table_data = self.storage_manager.get_table_data(table_name)
                 if table_data:
                     schema = self.storage_manager.get_table_schema(table_name)
+                    columns = [attr[0] for attr in schema.get_metadata()]
                     result_data = table_data
-                    self.display_table_data(result_data, schema)
+                    # self.display_table_data(result_data, schema)
                 else:
                     print(f"No data found in table '{table_name}'.")
 
-            return result_data, schema
+            return result_data, schema, columns
 
         except Exception as e:
             print(f"Error executing query: {e}")
-            return [], []
-
-
+            return [], [], {}
 
     def get_table_names(self, query_tree: QueryTree) -> list[str]:
         """
@@ -254,86 +260,6 @@ class QueryExecutor:
                 liste_table.append(query_tree.val)
             query_tree = query_tree.child[0]
         return liste_table
-
-    def display_projected_data(self, table_data, schema, columns):
-        """
-        Display the table data for projected columns (SELECT column1, column2).
-        """
-        column_names = [attr[0] for attr in schema.get_metadata()]
-
-        # Get the indices of the requested columns
-        column_indices = [column_names.index(col.strip()) for col in columns]
-
-        # Filter data to show only the selected columns
-        projected_data = [[row[idx] for idx in column_indices] for row in table_data]
-
-        column_widths = [len(col) for col in columns]
-        for row in projected_data:
-            column_widths = [max(width, len(str(value))) for width, value in zip(column_widths, row)]
-
-        row_format = " | ".join(f"{{:<{width}}}" for width in column_widths)
-        separator = "-+-".join("-" * width for width in column_widths)
-
-        print(row_format.format(*columns))
-        print(separator)
-        for row in projected_data:
-            print(row_format.format(*row))
-
-    def display_projected_data_with_alias(self, table_data, schema, column_mapping):
-        """
-        Display the table data for projected columns (SELECT column1 AS alias1, ...).
-        """
-        column_names = [attr[0] for attr in schema.get_metadata()]
-        column_indices = []
-        # Map original columns to indices
-        for original_column in column_mapping.keys():
-            if original_column in column_names:
-                column_indices.append(column_names.index(original_column))
-            else:
-                print(f"Error: Column '{original_column}' is not in table schema.")
-                return
-
-        # Filter data to show only the selected columns
-        projected_data = [
-            [row[idx] for idx in column_indices] for row in table_data
-        ]
-
-        # Use aliases as headers
-        aliases = list(column_mapping.values())
-        column_widths = [len(alias) for alias in aliases]
-
-        # Calculate column widths based on data
-        for row in projected_data:
-            column_widths = [
-                max(width, len(str(value)))
-                for width, value in zip(column_widths, row)
-            ]
-  
-        # Print table with aliases as headers
-        row_format = " | ".join(f"{{:<{width}}}" for width in column_widths)
-        separator = "-+-".join("-" * width for width in column_widths)
-
-        print(row_format.format(*aliases))
-        print(separator)
-        for row in projected_data:
-            print(row_format.format(*row))
-
-    def display_table_data(self, table_data, schema):
-        """
-        Display the full table data (SELECT * FROM table).
-        """
-        column_names = [attr[0] for attr in schema.get_metadata()]
-        column_widths = [len(name) for name in column_names]
-        for row in table_data:
-            column_widths = [max(width, len(str(value))) for width, value in zip(column_widths, row)]
-
-        row_format = " | ".join(f"{{:<{width}}}" for width in column_widths)
-        separator = "-+-".join("-" * width for width in column_widths)
-
-        print(row_format.format(*column_names))
-        print(separator)
-        for row in table_data:
-            print(row_format.format(*row))
 
     def parse_insert(self, statement: str):
         """

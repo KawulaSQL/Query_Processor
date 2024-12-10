@@ -15,8 +15,6 @@ if __name__ == "__main__":
             print("Exiting KawulaSQL. Goodbye!")
             break
 
-        print(f"\nOriginal Query: {query}\n")
-        
         try:
             result = query_processor.process_query(query)
             if isinstance(result, ExecutionResult):
