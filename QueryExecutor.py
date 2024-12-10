@@ -9,9 +9,11 @@ from Query_Optimizer.model.models import QueryTree
 from Storage_Manager.StorageManager import StorageManager
 from Storage_Manager.lib.Schema import Schema
 from Storage_Manager.lib.Attribute import Attribute
-from Concurrency_Control_Manager.ConcurrencyControlManager import ConcurrencyControlManager
-from Concurrency_Control_Manager.models import Operation
-from Concurrency_Control_Manager.models import CCManagerEnums
+# from Concurrency_Control_Manager.ConcurrencyControlManager import ConcurrencyControlManager
+# from Concurrency_Control_Manager.models import Operation
+# from Concurrency_Control_Manager.models import CCManagerEnums
+from bang.bangs import ExecutionResult, Rows
+from datetime import datetime
 
 import re
 
@@ -19,33 +21,49 @@ class QueryExecutor:
     def __init__(self, base_path: str):
         self.base_path = base_path
         self.storage_manager = StorageManager(base_path)
-        self.conccurency_control_manager = ConcurrencyControlManager()
+        # self.conccurency_control_manager = ConcurrencyControlManager()
         self.is_transacting = False
         self.operations = []
         self.transact_id = 0
 
-    def execute_select(self, query: str):
-        optimizer = QueryOptimizer(query)
-        parsed_result = optimizer.parse()
-        print("Parsed Query Tree:")
-        print_tree(parsed_result.query_tree)
+    def execute_select(self, query: str) -> ExecutionResult:
+        try:
+            optimizer = QueryOptimizer(query)
+            parsed_result = optimizer.parse()
 
-        table_name = self.get_table_names(parsed_result.query_tree)
-        operations = self.convert_to_operation_select(table_name, self.transact_id)
-        # response = self.check_for_response(operations)
+            # table_name = self.get_table_names(parsed_result.query_tree)
+            # operations = self.convert_to_operation_select(table_name, self.transact_id)
 
-        # if response.responseType == "Abort":
-        #   return "Execution not allowed"
+            # if self.is_transacting:
+            #     for operation in operations:
+            #         self.operations.append(operation)
 
-        if self.is_transacting:
-            for operation in operations:
-                self.operations.append(operation)
+            optimized_tree = optimizer.optimize(parsed_result.query_tree)
 
-        optimized_tree = optimizer.optimize(parsed_result.query_tree)
-        print("\nOptimized Query Tree:")
-        print_tree(optimized_tree)
+            result_data = self.execute_query(optimized_tree)
 
-        self.execute_query(optimized_tree)
+            timestamp = datetime.now()
+            previous_data = Rows(data=[], rows_count=0)
+            new_data = Rows(data=result_data, rows_count=len(result_data))
+
+            return ExecutionResult(
+                transaction_id=self.transact_id,
+                timestamp=timestamp,
+                status="success",
+                query=query,
+                previous_data=previous_data,
+                new_data=new_data
+            )
+        
+        except Exception as e:
+            return ExecutionResult(
+                transaction_id=self.transact_id,
+                timestamp=datetime.now(),
+                status="error",
+                query=query,
+                previous_data=Rows(data=[], rows_count=0),
+                new_data=Rows(data=[], rows_count=0)
+            )
 
     def execute_insert(self, statement: str):
         """
@@ -143,80 +161,88 @@ class QueryExecutor:
         # response = self.conccurency_control_manager.send_response_to_processor(response)
         # return response
 
-    def execute_query(self, query_tree: QueryTree):
+    def execute_query(self, query_tree: QueryTree) -> list:
         """
-        Execute the query based on the optimized query tree.
+        Execute the query based on the optimized query tree and return the result as a list.
         """
-        if query_tree.type == 'limit':
-            limit_value = int(query_tree.condition)
-            if query_tree.child and query_tree.child[0].type == 'table':
-                table_name = query_tree.child[0].val
-                table_data = self.storage_manager.get_table_data(table_name)
-                if table_data:
-                    schema = self.storage_manager.get_table_schema(table_name)
-                    table_data = table_data[:limit_value]
-                    self.display_table_data(table_data, schema)
-                else:
-                    print(f"No data found in table '{table_name}'.")
-            else:
-                print("Error: No valid table node found under limit node.")
-        
-        elif query_tree.type == 'project':
-            if query_tree.child and query_tree.child[0].type == 'table':
-                table_name = query_tree.child[0].val
-            elif query_tree.child and query_tree.child[0].type == 'limit':
-                limit_value = int(query_tree.child[0].condition)
-                if query_tree.child[0].child and query_tree.child[0].child[0].type == 'table':
-                    table_name = query_tree.child[0].child[0].val
+        try:
+            result_data = []
+
+            if query_tree.type == 'limit':
+                limit_value = int(query_tree.condition)
+                if query_tree.child and query_tree.child[0].type == 'table':
+                    table_name = query_tree.child[0].val
                     table_data = self.storage_manager.get_table_data(table_name)
                     if table_data:
                         schema = self.storage_manager.get_table_schema(table_name)
-                        table_data = table_data[:limit_value]
+                        result_data = table_data[:limit_value]
                     else:
                         print(f"No data found in table '{table_name}'.")
                 else:
                     print("Error: No valid table node found under limit node.")
-                    return
-            else:
-                print("Error: No valid table node found under project node.")
-                return
-
-            # Parse columns and aliases
-            columns = query_tree.condition.split(',')
-            column_mapping = {}
-            for col in columns:
-                match = re.match(r'\s*(\S+)\s+AS\s+(\S+)\s*', col.strip(), re.IGNORECASE)
-                if match:
-                    original = match.group(1).strip() 
-                    alias = match.group(2).strip() 
-                    column_mapping[original] = alias
-                else:
-                    column_mapping[col.strip()] = col.strip()
-
-            # Get table data and schema
-            table_data = self.storage_manager.get_table_data(table_name)
-            if table_data:
-                schema = self.storage_manager.get_table_schema(table_name)
-                
-                if query_tree.child and query_tree.child[0].type == 'limit':
+            
+            elif query_tree.type == 'project':
+                if query_tree.child and query_tree.child[0].type == 'table':
+                    table_name = query_tree.child[0].val
+                elif query_tree.child and query_tree.child[0].type == 'limit':
                     limit_value = int(query_tree.child[0].condition)
-                    table_data = table_data[:limit_value]
-                    self.display_projected_data_with_alias(table_data, schema, column_mapping)
+                    if query_tree.child[0].child and query_tree.child[0].child[0].type == 'table':
+                        table_name = query_tree.child[0].child[0].val
+                        table_data = self.storage_manager.get_table_data(table_name)
+                        if table_data:
+                            schema = self.storage_manager.get_table_schema(table_name)
+                            result_data = table_data[:limit_value]
+                        else:
+                            print(f"No data found in table '{table_name}'.")
+                    else:
+                        print("Error: No valid table node found under limit node.")
+                        return []
                 else:
-                    self.display_projected_data_with_alias(
-                    table_data, schema, column_mapping
-                    )
-            else:
-                print(f"No data found in table '{table_name}'.")
+                    print("Error: No valid table node found under project node.")
+                    return []
 
-        elif query_tree.type == 'table':
-            table_name = query_tree.val
-            table_data = self.storage_manager.get_table_data(table_name)
-            if table_data:
-                schema = self.storage_manager.get_table_schema(table_name)
-                self.display_table_data(table_data, schema)
-            else:
-                print(f"No data found in table '{table_name}'.")
+                # Parse columns and aliases
+                columns = query_tree.condition.split(',')
+                column_mapping = {}
+                for col in columns:
+                    match = re.match(r'\s*(\S+)\s+AS\s+(\S+)\s*', col.strip(), re.IGNORECASE)
+                    if match:
+                        original = match.group(1).strip() 
+                        alias = match.group(2).strip() 
+                        column_mapping[original] = alias
+                    else:
+                        column_mapping[col.strip()] = col.strip()
+
+                # Get table data and schema
+                table_data = self.storage_manager.get_table_data(table_name)
+                if table_data:
+                    schema = self.storage_manager.get_table_schema(table_name)
+                    if query_tree.child and query_tree.child[0].type == 'limit':
+                        limit_value = int(query_tree.child[0].condition)
+                        result_data = table_data[:limit_value]
+                    else:
+                        result_data = table_data
+
+                    self.display_projected_data_with_alias(result_data, schema, column_mapping)
+                else:
+                    print(f"No data found in table '{table_name}'.")
+
+            elif query_tree.type == 'table':
+                table_name = query_tree.val
+                table_data = self.storage_manager.get_table_data(table_name)
+                if table_data:
+                    schema = self.storage_manager.get_table_schema(table_name)
+                    result_data = table_data
+                    self.display_table_data(result_data, schema)
+                else:
+                    print(f"No data found in table '{table_name}'.")
+
+            return result_data
+
+        except Exception as e:
+            print(f"Error executing query: {e}")
+            return []
+
 
     def get_table_names(self, query_tree: QueryTree) -> list[str]:
         """
@@ -338,14 +364,14 @@ class QueryExecutor:
 
         return table_name, attributes
     
-    def convert_to_operation_select(self, table_name: list[str], transact_id: int):
-        operations = []
-        for table in table_name:
-            operations.append(Operation(CCManagerEnums.OperationType.R, f"tx{transact_id}", table))
-        return operations
+    # def convert_to_operation_select(self, table_name: list[str], transact_id: int):
+    #     operations = []
+    #     for table in table_name:
+    #         operations.append(Operation(CCManagerEnums.OperationType.R, f"tx{transact_id}", table))
+    #     return operations
     
-    def convert_to_operation_insert(self, table_name: list[str], transact_id: int):
-        operations = []
-        for table in table_name:
-            operations.append(Operation(CCManagerEnums.OperationType.W, f"tx{transact_id}", table))
-        return operations
+    # def convert_to_operation_insert(self, table_name: list[str], transact_id: int):
+    #     operations = []
+    #     for table in table_name:
+    #         operations.append(Operation(CCManagerEnums.OperationType.W, f"tx{transact_id}", table))
+    #     return operations
