@@ -1,5 +1,5 @@
 from QueryExecutor import QueryExecutor
-from QueryUtils import get_query_type, print_tree
+from utils.query import get_query_type
 
 class QueryProcessor:
     def __init__(self, base_path: str):

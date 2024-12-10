@@ -3,7 +3,6 @@ sys.path.append('./Query_Optimizer')
 sys.path.append('./Storage_Manager')
 sys.path.append('./Concurrency_Control_Manager')
 
-from QueryUtils import print_tree
 from Query_Optimizer.QueryOptimizer import QueryOptimizer
 from Query_Optimizer.model.models import QueryTree
 from Storage_Manager.StorageManager import StorageManager
