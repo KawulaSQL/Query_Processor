@@ -8,13 +8,15 @@ from Query_Optimizer.model.models import QueryTree
 from Storage_Manager.StorageManager import StorageManager
 from Storage_Manager.lib.Schema import Schema
 from Storage_Manager.lib.Attribute import Attribute
+from Storage_Manager.lib.Condition import Condition
 # from Concurrency_Control_Manager.ConcurrencyControlManager import ConcurrencyControlManager
 # from Concurrency_Control_Manager.models import Operation
 # from Concurrency_Control_Manager.models import CCManagerEnums
+# from Concurrency_Control_Manager.models import Resource
 from bang.bangs import ExecutionResult, Rows
 from datetime import datetime
 from typing import Tuple
-from utils.query import get_query_type
+from utils.query import get_query_type, print_tree
 
 import re
 
@@ -41,6 +43,9 @@ class QueryExecutor:
             #         self.operations.append(operation)
 
             optimized_tree = optimizer.optimize(parsed_result.query_tree)
+            table_name = self.get_table_names(optimized_tree) 
+            print("table name:", table_name)
+            print_tree(optimized_tree)
 
             result_data, schema, columns = self.execute_query(optimized_tree)
 
@@ -232,6 +237,24 @@ class QueryExecutor:
                     else:
                         print("Error: No valid table node found under limit node.")
                         return [], [], {}
+                elif query_tree.child and query_tree.child[0].type == 'sigma':
+                    table_name = query_tree.child[0].child[0].val
+                    where_clause = query_tree.child[0].condition
+                    match = re.match(r"(\w+)\s*([=<>!]+)\s*(.+)", where_clause)
+                    if match:
+                        column_name = match.group(1)
+                        operator = match.group(2)
+                        value = match.group(3)
+                        print("column_name:", column_name)
+                        print("operator:", operator)
+                        print("value:", value)
+
+                        result_data = self.storage_manager.get_table_data(table_name, Condition(column_name, operator, value))
+                        schema = self.storage_manager.get_table_schema(table_name)
+                        columns = [attr[0] for attr in schema.get_metadata()]
+                    else:
+                        print("Error: Invalid WHERE clause.")
+                        return [], [], {}
 
                 # Parse columns and aliases
                 columns = query_tree.condition.split(',')
@@ -271,6 +294,29 @@ class QueryExecutor:
                 else:
                     print(f"No data found in table '{table_name}'.")
 
+            elif query_tree.type == 'sigma':
+                table_name = query_tree.child[0].val
+                where_clause = query_tree.condition
+    
+                # Parsing where_clause menggunakan regex
+                match = re.match(r"(\w+)\s*([=<>!]+)\s*(.+)", where_clause)
+                if match:
+                    column_name = match.group(1)
+                    operator = match.group(2)
+                    value = match.group(3)
+
+                    print("column_name:", column_name)
+                    print("operator:", operator)
+                    print("value:", value)
+
+                    result_data = self.storage_manager.get_table_data(table_name, Condition(column_name, operator, value))
+                    schema = self.storage_manager.get_table_schema(table_name)
+                    columns = [attr[0] for attr in schema.get_metadata()]
+                else:
+                    print("Error: Invalid WHERE clause.")
+                    return [], [], {}
+
+
             return result_data, schema, columns
 
         except Exception as e:
@@ -281,12 +327,13 @@ class QueryExecutor:
         """
         Get all table names queried by user
         """
-        liste_table = []
-        while query_tree is not None:
-            if query_tree.type == 'table':
-                liste_table.append(query_tree.val)
-            query_tree = query_tree.child[0]
-        return liste_table
+        table_names = []
+        if query_tree.type == 'table':
+            table_names.append(query_tree.val)
+        elif query_tree.child:
+            for child in query_tree.child:
+                table_names.extend(self.get_table_names(child))
+        return table_names
     
     # def convert_to_operation_select(self, table_name: list[str], transact_id: int):
     #     operations = []

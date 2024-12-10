@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Generic, List, TypeVar, Union, Dict
+from typing import Generic, List, TypeVar, Union, Dict, Optional
 from dataclasses import dataclass
 
 T = TypeVar('T')
@@ -8,8 +8,8 @@ T = TypeVar('T')
 class Rows(Generic[T]):
     data: List[T]
     rows_count: int
-    schema: List[str]
-    columns: Dict[str, str]
+    schema: Optional[List[str]] = None
+    columns: Optional[Dict[str, str]] = None
 
 @dataclass
 class ExecutionResult:
@@ -18,5 +18,5 @@ class ExecutionResult:
     type: str
     status: str
     query: str
-    previous_data: Union[Rows, int]
-    new_data: Union[Rows, int]
+    previous_data: Union[Rows, int, None]
+    new_data: Union[Rows, int, None]
