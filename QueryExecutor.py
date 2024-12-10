@@ -121,39 +121,57 @@ class QueryExecutor:
             )
 
 
-    def execute_create(self, query: str):
-        """
-        Directly execute a CREATE query through the Storage Manager.
-
-        :param query: The SQL CREATE query string.
-        """
-        schema_match = re.match(r"CREATE TABLE (\w+)\s*\((.+)\)", query, re.IGNORECASE)
-        
-        if not schema_match:
-            print("Error: Invalid CREATE TABLE statement.")
-            return
-
-        table_name = schema_match.group(1).strip()
-        schema_str = schema_match.group(2).strip()
-
-        attributes = []
-        for attribute_str in schema_str.split(','):
-            attribute_str = attribute_str.strip()
-            match = re.match(r"(\w+)\s+(\w+)(?:\((\d+)\))?", attribute_str)
-            if match:
-                name = match.group(1)
-                dtype = match.group(2).lower()
-                size = int(match.group(3)) if match.group(3) else None
-                attributes.append(Attribute(name, dtype, size))
-            else:
-                print(f"Error: Invalid attribute definition '{attribute_str}'")
-                return
-
+    def execute_create(self, query: str) -> ExecutionResult:
         try:
+            schema_match = re.match(r"CREATE TABLE (\w+)\s*\((.+)\)", query, re.IGNORECASE)
+            
+            if not schema_match:
+                raise ValueError("Error: Invalid CREATE TABLE statement.")
+            
+            table_name = schema_match.group(1).strip()
+            schema_str = schema_match.group(2).strip()
+
+            attributes = []
+            for attribute_str in schema_str.split(','):
+                attribute_str = attribute_str.strip()
+                match = re.match(r"(\w+)\s+(\w+)(?:\((\d+)\))?", attribute_str)
+                if match:
+                    name = match.group(1)
+                    dtype = match.group(2).lower()
+                    size = int(match.group(3)) if match.group(3) else None
+                    attributes.append(Attribute(name, dtype, size))
+                else:
+                    raise ValueError(f"Error: Invalid attribute definition '{attribute_str}'")
+
             self.storage_manager.create_table(table_name, Schema(attributes))
-            print(f"{table_name} successfully created")
-        except ValueError as e :
-            print(e)
+            
+            timestamp = datetime.now()
+            schema = self.storage_manager.get_table_schema(table_name)
+            columns = [attr[0] for attr in schema.get_metadata()]
+
+            new_data = Rows(data=[], rows_count=0, schema=schema, columns=columns)
+
+            return ExecutionResult(
+                transaction_id=self.transact_id,
+                timestamp=timestamp,
+                type="CREATE",
+                status="success",
+                query=query,
+                previous_data=Rows(data=[], rows_count=0, schema=[], columns=[]),
+                new_data=new_data
+            )
+
+        except Exception as e:
+            return ExecutionResult(
+                transaction_id=self.transact_id,
+                timestamp=datetime.now(),
+                type="CREATE",
+                status="error",
+                query=query,
+                previous_data=Rows(data=[], rows_count=0, schema=[], columns=[]),
+                new_data=Rows(data=[], rows_count=0, schema=[], columns=[]),
+            )
+
 
     def begin_transaction(self):
         self.is_transacting = True
