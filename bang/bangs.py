@@ -8,6 +8,7 @@ T = TypeVar('T')
 class Rows(Generic[T]):
     data: List[T]
     rows_count: int
+    columns: List[str]
 
 @dataclass
 class ExecutionResult:

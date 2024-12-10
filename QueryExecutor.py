@@ -13,6 +13,7 @@ from Storage_Manager.lib.Attribute import Attribute
 # from Concurrency_Control_Manager.models import CCManagerEnums
 from bang.bangs import ExecutionResult, Rows
 from datetime import datetime
+from typing import Tuple
 
 import re
 
@@ -39,11 +40,11 @@ class QueryExecutor:
 
             optimized_tree = optimizer.optimize(parsed_result.query_tree)
 
-            result_data = self.execute_query(optimized_tree)
+            result_data, schema = self.execute_query(optimized_tree)
 
             timestamp = datetime.now()
-            previous_data = Rows(data=[], rows_count=0)
-            new_data = Rows(data=result_data, rows_count=len(result_data))
+            previous_data = Rows(data=[], rows_count=0, columns=[])
+            new_data = Rows(data=result_data, rows_count=len(result_data), columns=schema)
 
             return ExecutionResult(
                 transaction_id=self.transact_id,
@@ -60,8 +61,8 @@ class QueryExecutor:
                 timestamp=datetime.now(),
                 status="error",
                 query=query,
-                previous_data=Rows(data=[], rows_count=0),
-                new_data=Rows(data=[], rows_count=0)
+                previous_data=Rows(data=[], rows_count=0, columns=[]),
+                new_data=Rows(data=[], rows_count=0, columns=[])
             )
 
     def execute_insert(self, statement: str):
@@ -160,12 +161,14 @@ class QueryExecutor:
         # response = self.conccurency_control_manager.send_response_to_processor(response)
         # return response
 
-    def execute_query(self, query_tree: QueryTree) -> list:
+    def execute_query(self, query_tree: QueryTree) -> Tuple[list, list]:
         """
-        Execute the query based on the optimized query tree and return the result as a list.
+        Execute the query based on the optimized query tree and return the result as a list
+        along with the schema.
         """
         try:
             result_data = []
+            schema = []
 
             if query_tree.type == 'limit':
                 limit_value = int(query_tree.condition)
@@ -195,10 +198,7 @@ class QueryExecutor:
                             print(f"No data found in table '{table_name}'.")
                     else:
                         print("Error: No valid table node found under limit node.")
-                        return []
-                else:
-                    print("Error: No valid table node found under project node.")
-                    return []
+                        return [], []
 
                 # Parse columns and aliases
                 columns = query_tree.condition.split(',')
@@ -236,11 +236,12 @@ class QueryExecutor:
                 else:
                     print(f"No data found in table '{table_name}'.")
 
-            return result_data
+            return result_data, schema
 
         except Exception as e:
             print(f"Error executing query: {e}")
-            return []
+            return [], []
+
 
 
     def get_table_names(self, query_tree: QueryTree) -> list[str]:
