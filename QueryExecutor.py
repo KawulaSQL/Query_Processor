@@ -69,48 +69,57 @@ class QueryExecutor:
                 new_data=Rows(data=[], rows_count=0, columns=[])
             )
 
-    def execute_insert(self, statement: str):
-        """
-        Parse the INSERT INTO table_name VALUES (...) statement and directly execute it through the Storage Manager.
-
-        :param statement: The SQL INSERT query string.
-        """
+    def execute_insert(self, query: str) -> ExecutionResult:
         try:
-            if not statement.startswith("INSERT INTO"):
-                print("Error: Invalid INSERT statement.")
-                return
+            if not query.startswith("INSERT INTO"):
+                raise ValueError("Error: Invalid INSERT query.")
             
-            parts = statement.split("INSERT INTO")[1].split("VALUES")
+            parts = query.split("INSERT INTO")[1].split("VALUES")
             table_name = parts[0].strip()
-
-            operations = self.convert_to_operation_select(table_name, self.transact_id)
-            # response = self.check_for_response(operations)
-
-            # if response.responseType == "Abort":
-            #   return "Execution not allowed"
-
-            # As Transaction is beginning, operation is starting to be created
-            if self.is_transacting:
-                for operation in operations:
-                    self.operations.append(operation)
-
             values_str = parts[1].strip()[1:-1]
-
+            
             rows = values_str.split('),')
             values_list = []
             for row in rows:
                 row_values = row.strip().strip('()').split(',')
                 values_list.append([v.strip() for v in row_values])
-
+            
             if not values_list:
-                print(f"Error: No valid data to insert into '{table_name}'.")
-                return
-
+                raise ValueError(f"Error: No valid data to insert into '{table_name}'.")
+            
             self.storage_manager.insert_into_table(table_name, values_list)
-            print(f"Data inserted into '{table_name}' successfully.")
+            schema = self.storage_manager.get_table_schema(table_name)
+            columns = [attr[0] for attr in schema.get_metadata()]
+            
+            timestamp = datetime.now()
+            new_data = Rows(
+                data=values_list,
+                rows_count=len(values_list),
+                schema=schema,
+                columns=columns
+            )
+            
+            return ExecutionResult(
+                transaction_id=self.transact_id,
+                timestamp=timestamp,
+                type="INSERT",
+                status="success",
+                query=query,
+                previous_data=Rows(data=[], rows_count=0, schema=[], columns=[]),
+                new_data=new_data
+            )
         
         except Exception as e:
-            print(f"Error executing INSERT query: {e}")
+            return ExecutionResult(
+                transaction_id=self.transact_id,
+                timestamp=datetime.now(),
+                type="INSERT",
+                status="error",
+                query=query,
+                previous_data=Rows(data=[], rows_count=0, schema=[], columns=[]),
+                new_data=Rows(data=[], rows_count=0, schema=[], columns=[]),
+            )
+
 
     def execute_create(self, query: str):
         """
@@ -260,35 +269,6 @@ class QueryExecutor:
                 liste_table.append(query_tree.val)
             query_tree = query_tree.child[0]
         return liste_table
-
-    def parse_insert(self, statement: str):
-        """
-        Parse an INSERT INTO statement.
-        """
-        parts = statement.split("INSERT INTO")[1].split("VALUES")
-        table_name = parts[0].strip()
-        values_str = parts[1].strip()[1:-1]
-        rows = values_str.split('),')
-        values_list = []
-        for row in rows:
-            row_values = row.strip().strip('()').split(',')
-            values_list.append([v.strip() for v in row_values])
-
-        return table_name, values_list
-
-    def parse_create(self, query: str):
-        """
-        Parse a CREATE TABLE statement.
-        """
-        table_name = query.split()[2]
-        columns_section = query.split("(")[1].split(")")[0]
-        columns = columns_section.split(",")
-        attributes = []
-        for col in columns:
-            col_name, col_type = col.strip().split(" ")
-            attributes.append(col_name)  # Simplified for now
-
-        return table_name, attributes
     
     # def convert_to_operation_select(self, table_name: list[str], transact_id: int):
     #     operations = []
