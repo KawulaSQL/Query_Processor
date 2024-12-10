@@ -1,9 +1,9 @@
 import unittest
-from query_processor import QueryProcessor
+from QueryProcessor import QueryProcessor
 
 class TestQuery(unittest.TestCase):
     def setUp(self):
-        base_path = "./Storage_Manager/storage"
+        base_path = "./db-test"
         self.query_processor = QueryProcessor(base_path)
 
         self.select_true = [
