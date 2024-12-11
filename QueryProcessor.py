@@ -21,6 +21,10 @@ class QueryProcessor:
                 success = self.query_executor.execute_create(query)
             elif query_type == "UPDATE":
                 success = self.query_executor.execute_update(query)
+            elif query_type == "DELETE":
+                success = self.query_executor.execute_delete(query)
+            elif query_type == "DROP":
+                success = self.query_executor.execute_drop(query)
             elif query_type == "BEGIN TRANSACTION":
                 success = self.query_executor.begin_transaction()
             elif query_type == "COMMIT":

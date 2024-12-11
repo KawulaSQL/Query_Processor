@@ -243,6 +243,94 @@ class QueryExecutor:
                 new_data=Rows(data=[], rows_count=0, schema=[], columns=[]),
             )
 
+    def execute_delete(self, query: str) -> ExecutionResult:
+        try:
+            delete_match = re.match(r"DELETE FROM\s+(\w+)\s+WHERE\s+(.+)", query, re.IGNORECASE)
+
+            if not delete_match:
+                raise ValueError("Error: Invalid DELETE query.")
+
+            table_name = delete_match.group(1).strip().lower()
+            where_clause = delete_match.group(2).strip()
+
+            match = re.match(r"(\w+)\s*([=<>!]+)\s*(.+)", where_clause)
+            if not match:
+                raise ValueError("Error: Invalid WHERE clause. Ensure it follows the correct format 'column operator value'.")
+
+            where_column = match.group(1).strip().lower()
+            operator = match.group(2).strip()
+            where_value = match.group(3).strip()
+            condition = Condition(where_column, operator, where_value)
+            schema = self.storage_manager.get_table_schema(table_name)
+
+            rows_affected = self.storage_manager.delete_table_record(table_name, condition)
+            print(f"{rows_affected} row(s) deleted from '{table_name}'.")
+
+            columns = [attr[0] for attr in schema.get_metadata()]
+            timestamp = datetime.now()
+
+            new_data = Rows(
+                data=[],
+                rows_count=0,
+                schema=schema,
+                columns=columns
+            )
+
+            return ExecutionResult(
+                transaction_id=self.transact_id,
+                timestamp=timestamp,
+                type="DELETE",
+                status="success",
+                query=query,
+                previous_data=Rows(data=[], rows_count=0, schema=[], columns=[]),
+                new_data=new_data
+            )
+
+        except Exception as e:
+            print(f"Error: {e}")
+            return ExecutionResult(
+                transaction_id=self.transact_id,
+                timestamp=datetime.now(),
+                type="DELETE",
+                status="error",
+                query=query,
+                previous_data=Rows(data=[], rows_count=0, schema=[], columns=[]),
+                new_data=Rows(data=[], rows_count=0, schema=[], columns=[]),
+            )
+
+    def execute_drop(self, query: str) -> ExecutionResult:
+        try:
+            drop_match = re.match(r"DROP TABLE\s+(\w+)", query, re.IGNORECASE)
+
+            if not drop_match:
+                raise ValueError("Error: Invalid DROP TABLE statement.")
+
+            table_name = drop_match.group(1).strip().lower()
+            self.storage_manager.delete_table(table_name)
+
+            timestamp = datetime.now()
+            new_data = Rows(data=[], rows_count=0, schema=[], columns=[])
+
+            return ExecutionResult(
+                transaction_id=self.transact_id,
+                timestamp=timestamp,
+                type="DROP",
+                status="success",
+                query=query,
+                previous_data=Rows(data=[], rows_count=0, schema=[], columns=[]),
+                new_data=new_data
+            )
+
+        except Exception as e:
+            return ExecutionResult(
+                transaction_id=self.transact_id,
+                timestamp=datetime.now(),
+                type="DROP",
+                status="error",
+                query=query,
+                previous_data=Rows(data=[], rows_count=0, schema=[], columns=[]),
+                new_data=Rows(data=[], rows_count=0, schema=[], columns=[]),
+            )
 
     def begin_transaction(self):
         self.is_transacting = True
@@ -353,6 +441,7 @@ class QueryExecutor:
                         print("value:", value)
 
                         result_data = self.storage_manager.get_table_data(table_name, Condition(column_name, operator, value))
+                        print(Condition(column_name, operator, value))
                         schema = self.storage_manager.get_table_schema(table_name)
                         columns = [attr[0] for attr in schema.get_metadata()]
                     else:
