@@ -42,12 +42,12 @@ class QueryExecutor:
             #     for operation in operations:
             #         self.operations.append(operation)
 
-            optimized_tree = optimizer.optimize(parsed_result.query_tree)
-            table_name = self.get_table_names(optimized_tree) 
+            # optimized_tree = optimizer.optimize(parsed_result.query_tree)
+            table_name = self.get_table_names(parsed_result.query_tree) 
             print("table name:", table_name)
-            print_tree(optimized_tree)
+            print_tree(parsed_result.query_tree)
 
-            result_data, schema, columns = self.execute_query(optimized_tree)
+            result_data, schema, columns = self.execute_query(parsed_result.query_tree)
 
             timestamp = datetime.now()
             previous_data = Rows(data=[], rows_count=0, schema=[], columns={})
@@ -218,6 +218,24 @@ class QueryExecutor:
                         columns = [attr[0] for attr in schema.get_metadata()]
                     else:
                         print(f"No data found in table '{table_name}'.")
+                elif query_tree.child and query_tree.child[0].type == 'sort':
+                    table_name = query_tree.child[0].child[0].val
+                    table_data = self.storage_manager.get_table_data(table_name)
+                    if table_data:
+                        schema = self.storage_manager.get_table_schema(table_name)
+                        columns = [attr[0] for attr in schema.get_metadata()]
+                        sort_condition = query_tree.child[0].condition.split()
+                        sort_column = sort_condition[0]
+                        sort_order = sort_condition[1].lower() if len(sort_condition) > 1 else "asc"
+                        column_indices = {attr[0]: idx for idx, attr in enumerate(schema.get_metadata())}
+                        if sort_column in column_indices:
+                            column_index = column_indices[sort_column]
+                            reverse = sort_order == "desc"
+                            result_data = sorted(table_data, key=lambda x: x[column_index], reverse=reverse)[:limit_value]
+                        else:
+                            print(f"Error: Column '{sort_column}' does not exist in table '{table_name}'.")
+                    else:
+                        print(f"No data found in table '{table_name}'.")
                 else:
                     print("Error: No valid table node found under limit node.")
             
@@ -232,6 +250,25 @@ class QueryExecutor:
                         if table_data:
                             schema = self.storage_manager.get_table_schema(table_name)
                             result_data = table_data[:limit_value]
+                        else:
+                            print(f"No data found in table '{table_name}'.")
+                    elif query_tree.child[0].child and query_tree.child[0].child[0].type == 'sort':
+                        table_name = query_tree.child[0].child[0].child[0].val
+                        table_data = self.storage_manager.get_table_data(table_name)
+                        if table_data:
+                            schema = self.storage_manager.get_table_schema(table_name)
+                            columns = [attr[0] for attr in schema.get_metadata()]
+                            sort_condition = query_tree.child[0].child[0].condition.split()
+                            sort_column = sort_condition[0]
+                            sort_order = sort_condition[1].lower() if len(sort_condition) > 1 else "asc"
+                            column_indices = {attr[0]: idx for idx, attr in enumerate(schema.get_metadata())}
+                            if sort_column in column_indices:
+                                column_index = column_indices[sort_column]
+                                reverse = sort_order == "desc"
+                                result_data = sorted(table_data, key=lambda x: x[column_index], reverse=reverse)[:limit_value]
+                                print("result_data:", result_data)
+                            else:
+                                print(f"Error: Column '{sort_column}' does not exist in table '{table_name}'.")
                         else:
                             print(f"No data found in table '{table_name}'.")
                     else:
@@ -275,7 +312,7 @@ class QueryExecutor:
                             result_data = sorted(table_data, key=lambda x: x[column_index], reverse=reverse)
 
                             columns = [attr[0] for attr in schema.get_metadata()]
-                            print("result_data:", result_data)
+                            # print("result_data:", result_data)
                         else:
                             print(f"Error: Column '{sort_column}' does not exist in table '{table_name}'.")
                     else:
@@ -300,11 +337,12 @@ class QueryExecutor:
                     schema = self.storage_manager.get_table_schema(table_name)
                     if query_tree.child and query_tree.child[0].type == 'limit':
                         limit_value = int(query_tree.child[0].condition)
-                        result_data = table_data[:limit_value]
+                        result_data = sorted(table_data, key=lambda x: x[column_index], reverse=reverse)[:limit_value]
+                    elif query_tree.child and query_tree.child[0].type == 'sort':
+                        result_data = sorted(table_data, key=lambda x: x[column_index], reverse=reverse)
                     else:
                         result_data = table_data
-
-                    # self.display_projected_data_with_alias(result_data, schema, column_mapping)
+                    
                 else:
                     print(f"No data found in table '{table_name}'.")
 
