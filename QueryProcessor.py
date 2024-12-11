@@ -19,6 +19,8 @@ class QueryProcessor:
                 success = self.query_executor.execute_insert(query)
             elif query_type == "CREATE":
                 success = self.query_executor.execute_create(query)
+            elif query_type == "UPDATE":
+                success = self.query_executor.execute_update(query)
             elif query_type == "BEGIN TRANSACTION":
                 success = self.query_executor.begin_transaction()
             elif query_type == "COMMIT":

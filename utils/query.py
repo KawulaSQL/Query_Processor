@@ -10,6 +10,8 @@ def get_query_type(query: str):
         return "INSERT"
     elif query.startswith("CREATE"):
         return "CREATE"
+    elif query.startswith("UPDATE"):
+        return "UPDATE"
     elif query.startswith("BEGIN TRANSACTION"):
         return "BEGIN TRANSACTION"
     elif query.startswith("COMMIT"):

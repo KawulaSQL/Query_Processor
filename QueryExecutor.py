@@ -177,6 +177,72 @@ class QueryExecutor:
                 new_data=Rows(data=[], rows_count=0, schema=[], columns=[]),
             )
 
+    def execute_update(self, query: str) -> ExecutionResult:
+        try:
+            update_match = re.match(r"UPDATE\s+(\w+)\s+SET\s+(.+)\s+WHERE\s+(.+)", query, re.IGNORECASE)
+
+            if not update_match:
+                raise ValueError("Error: Invalid UPDATE query.")
+
+            table_name = update_match.group(1).strip().lower()
+            set_clause = update_match.group(2).strip()
+            where_clause = update_match.group(3).strip()
+
+            update_values = {}
+            for set_part in set_clause.split(','):
+                set_part = set_part.strip()
+                match = re.match(r"(\w+)\s*=\s*(.+)", set_part)
+                if not match:
+                    raise ValueError("Error: Invalid SET clause. Ensure it follows the correct format 'column = value'.")
+                column_name = match.group(1).strip().lower()
+                value = match.group(2).strip()
+                update_values[column_name] = value
+
+            match = re.match(r"(\w+)\s*([=<>!]+)\s*(.+)", where_clause)
+            if not match:
+                raise ValueError("Error: Invalid WHERE clause. Ensure it follows the correct format 'column operator value'.")
+
+            where_column = match.group(1).strip().lower()
+            operator = match.group(2).strip()
+            where_value = match.group(3).strip()
+            condition = Condition(where_column, operator, where_value)
+            schema = self.storage_manager.get_table_schema(table_name)
+
+            rows_affected = self.storage_manager.update_table(table_name, condition, update_values)
+            print(f"{rows_affected} row(s) updated in '{table_name}'.")
+
+            columns = [attr[0] for attr in schema.get_metadata()]
+            timestamp = datetime.now()
+
+            new_data = Rows(
+                data=[],
+                rows_count=0,
+                schema=schema,
+                columns=columns
+            )
+
+            return ExecutionResult(
+                transaction_id=self.transact_id,
+                timestamp=timestamp,
+                type="UPDATE",
+                status="success",
+                query=query,
+                previous_data=Rows(data=[], rows_count=0, schema=[], columns=[]),
+                new_data=new_data
+            )
+
+        except Exception as e:
+            print(f"Error: {e}")
+            return ExecutionResult(
+                transaction_id=self.transact_id,
+                timestamp=datetime.now(),
+                type="UPDATE",
+                status="error",
+                query=query,
+                previous_data=Rows(data=[], rows_count=0, schema=[], columns=[]),
+                new_data=Rows(data=[], rows_count=0, schema=[], columns=[]),
+            )
+
 
     def begin_transaction(self):
         self.is_transacting = True
