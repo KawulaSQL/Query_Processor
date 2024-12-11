@@ -1,75 +1,90 @@
 import unittest
+import shutil
+
 from QueryProcessor import QueryProcessor
 
 class TestQuery(unittest.TestCase):
     def setUp(self):
-        base_path = "./db-test"
+        # Duplicates the test db so it wont be overwritten
+        shutil.copytree('./db-test', 'db-test-copy', dirs_exist_ok=True)
+
+        base_path = "./db-test-copy"
         self.query_processor = QueryProcessor(base_path)
 
-        self.select_true = [
-            "SELECT * FROM users;",
-            "SELECT id, name FROM users;",
-            "SELECT * FROM employee WHERE salary > 1000;",
-            "UPDATE employee SET salary = 1.05 * salary WHERE salary > 1000;",
-            "SELECT * FROM student AS s, lecturer AS l WHERE s.lecturer_id = l.id;",
-            "SELECT * FROM orders WHERE price >= 100;",
-            "SELECT name FROM users ORDER BY name ASC;",
-            "SELECT salary FROM employee ORDER BY salary DESC;",
-            "SELECT * FROM users LIMIT 10;",
-            "SELECT * FROM products WHERE price < 500 LIMIT 20;",
-            "SELECT id, name FROM table1 NATURAL JOIN table2;",
-            "SELECT * FROM orders WHERE price <= 1000 ORDER BY price DESC;",
-            "UPDATE users SET age = age * 2 WHERE age >= 18;",
-            "SELECT * FROM users WHERE name = 'John';",
-            "SELECT * FROM books WHERE title <> 'Unknown';",
-            "SELECT * FROM employees WHERE salary >= 50000;",
-            "SELECT * FROM table1 JOIN table2 ON table1.id = table2.id;",
-            "SELECT * FROM sales WHERE amount < 1000 ORDER BY amount ASC;",
-            "SELECT id, name FROM customers WHERE id > 100 LIMIT 5;",
-            "SELECT * FROM users WHERE username <> 'admin';",
-            "SELECT * FROM orders WHERE order_date >= '2023-01-01';",
-            "SELECT * FROM employee WHERE dept_id = 1;",
-            "SELECT id, salary FROM employee ORDER BY salary ASC LIMIT 5;",
-            "UPDATE employee SET salary = salary * 1.2 WHERE id = 7;",
-            "SELECT * FROM table1 NATURAL JOIN table2 WHERE table1.id >= 10;",
+        self.read_case = [
+            "SELECT * FROM student;", 
+            "SELECT id, name FROM student;", 
+            "SELECT * FROM student, instructor",
+            "SELECT * FROM student LIMIT 5",
+            "SELECT * FROM instructor WHERE salary > 1000;", 
+            "SELECT * FROM student WHERE total_cred >= 500;", 
+            "SELECT * FROM instructor WHERE name = 'A';", 
+            "SELECT * FROM student WHERE id < 100;", 
+            "SELECT * FROM instructor WHERE id <= 25;", 
+            "SELECT * FROM student, lecturer",
+            "SELECT * FROM student AS s, lecturer AS l WHERE s.id = l.id;", 
+            "SELECT * FROM student ORDER BY total_cred;",
+            "SELECT name FROM student ORDER BY name ASC;",
+            "SELECT * FROM instructor ORDER BY salary DESC;",
+            "SELECT * FROM student NATURAL JOIN instructor;",
+            "SELECT * FROM student JOIN instructor ON student.id = instructor.id;",
+            "SELECT id, dept_name FROM student AS s JOIN instructor AS i ON s.id <> i.id WHERE i.salary <= 10000 ORDER BY DESC LIMIT 15;",
         ]
 
-        self.select_false = [
-            "SELET * FROM users;",
-            "UPDATE employee SET salary = salary * 1.1 salary > 1000;",
-            "SELECT * WHEN users;",
-            "SELECT * FROM users WHERE name == 'John';",
-            "SELECT FROM users WHERE age > 18;",
-            "SELECT * FROM users ORDER YB name;",
-            "UPDATE employee SET salary;",
-            "SELECT * WHERE id > 10;",
-            "SELECT name, FROM users;",
-            "SELECT id, name LIMIT 10 FROM users;",
-            "SELECT * FROM table1 LIMIT -5;",
-            "SELECT * FROM orders ORDER BY ASC;",
-            "UPDATE employee SET salary = WHERE id = 5;",
-            "SELECT * FROM employee WHERE salary !> 1000;",
-            "SELECT * FROM users WHERE name LIKE '%John%';",
-            "SELECT * FROM table1 JOIN table2 WHERE table1.id table2.id;",
-            "SELECT name FROM users GROUP BY age;",
-            "SELECT * FROM employee ORDER salary;",
-            "SELECT * FROM users WHERE age <>;",
-            "SELECT name FROM WHERE id = 1;",
-            "UPDATE employee SET WHERE id = 5;",
-            "SELECT * FROM users LIMIT LIMIT;",
-            "SELECT name AS users WHERE age > 10;",
-            "SELECT * FROM table1 NATURAL JOIN;",
-            "UPDATE employee SET salary salary * 1.1 WHERE id = 10;",
+        self.write_case = [
+            "UPDATE student SET total_cred = 114;",
+            "UPDATE instructor SET salary = 0.95 * salary;",
+            "UPDATE instructor SET salary = 1.05 * salary WHERE salary > 1000;",
+            "UPDATE instructor SET salary = salary * 1.2 WHERE id = 7;",
+            "UPDATE student SET age = age * 2 WHERE age <= 18;",
+
+            "CREATE TABLE test1 (int int, float float, char char, varchar varchar(250));",
+
+            "INSERT INTO test1 VALUES (1, 1.5, 'aaa', 'bbb');",
+
+            "DELETE FROM test1;",
+
+            "DROP TABLE test1;",
         ]
 
-    def test_select_true(self):
-        for query in self.select_true:
+        self.invalid_case = [
+            "SELECT FROM;",
+            "SELECT none FROM student;",
+            "SELECT * FROM none;",
+            "SELECT * FROM student AS;",
+            "SELECT * FROM student instructor;",
+            "SELECT * FROM student LIMIT;",
+            "SELECT * FROM instructor WHERE salary 1000;", 
+            "SELECT * FROM WHERE total_cred >= 500;", 
+            "SELECT * FROM student, none;",
+            "SELECT * FROM student AS s, lecturer AS s WHERE s.id = s.id;", 
+            "SELECT name FROM student ORDER BY;"
+            "SELECT * FROM none NATURAL JOIN instructor;",
+            "SELECT * FROM student JOIN instructor ON student.id = none;",
+
+            "CREATE TABLE test2;",
+
+            "INSERT INTO student;",
+
+            "DELETE student;",
+
+            "DROP FROM student;",
+        ]
+
+    def test_read(self):
+        for query in self.read_case:
             result = self.query_processor.process_query(query)
 
             self.assertTrue(result, f"Expected True from query: {query}")
 
-    def test_select_false(self):
-        for query in self.select_false:
+    def test_write(self):
+        for query in self.write_case:
+            result = self.query_processor.process_query(query)
+
+            self.assertFalse(result, f"Expected True from query: {query}")
+
+    def test_invalid(self):
+        for query in self.invalid_case:
             result = self.query_processor.process_query(query)
 
             self.assertFalse(result, f"Expected False from query: {query}")
