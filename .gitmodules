@@ -7,3 +7,6 @@
 [submodule "Concurrency_Control_Manager"]
 	path = Concurrency_Control_Manager
 	url = https://github.com/KawulaSQL/Concurrency_Control_Manager
+[submodule "Failure_Recovery"]
+	path = Failure_Recovery
+	url = https://github.com/KawulaSQL/Failure_Recovery
