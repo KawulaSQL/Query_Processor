@@ -14,14 +14,14 @@ class TestQuery(unittest.TestCase):
         self.read_case = [
             "SELECT * FROM student;", 
             "SELECT id, name FROM student;", 
-            "SELECT * FROM student, instructor",
-            "SELECT * FROM student LIMIT 5",
+            "SELECT * FROM student, instructor;",
+            "SELECT * FROM student LIMIT 5;",
             "SELECT * FROM instructor WHERE salary > 1000;", 
             "SELECT * FROM student WHERE total_cred >= 500;", 
             "SELECT * FROM instructor WHERE name = 'A';", 
             "SELECT * FROM student WHERE id < 100;", 
             "SELECT * FROM instructor WHERE id <= 25;", 
-            "SELECT * FROM student, lecturer",
+            "SELECT * FROM student, lecturer;",
             "SELECT * FROM student AS s, lecturer AS l WHERE s.id = l.id;", 
             "SELECT * FROM student ORDER BY total_cred;",
             "SELECT name FROM student ORDER BY name ASC;",
@@ -71,6 +71,9 @@ class TestQuery(unittest.TestCase):
             "DROP FROM student;",
         ]
 
+    def tearDown(self):
+        shutil.rmtree('./db-test-copy', ignore_errors=True)
+
     def test_read(self):
         for query in self.read_case:
             result = self.query_processor.process_query(query)
@@ -81,7 +84,7 @@ class TestQuery(unittest.TestCase):
         for query in self.write_case:
             result = self.query_processor.process_query(query)
 
-            self.assertFalse(result, f"Expected True from query: {query}")
+            self.assertTrue(result, f"Expected True from query: {query}")
 
     def test_invalid(self):
         for query in self.invalid_case:
