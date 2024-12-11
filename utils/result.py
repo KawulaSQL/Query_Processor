@@ -80,3 +80,41 @@ def print_execution_result(result: ExecutionResult):
             print(e)
 
     print("-" * 50)
+
+def display_result(result: ExecutionResult):
+    """Displays execution result based on query type."""
+    if result.status == "error":
+        print("Error occurred while executing the query.")
+        return
+
+    if result.type == "SELECT":
+        if result.new_data.rows_count > 0:
+            try:
+                aliases, projected_data = process_columns_and_data(
+                    result.new_data.schema, result.new_data.columns, result.new_data.data
+                )
+                print_table(projected_data, result.new_data.columns, aliases)
+            except ValueError as e:
+                print("Error displaying table:", e)
+        else:
+            print("No data found.")
+
+    elif result.type == "CREATE":
+        print("Table created successfully.")
+
+    elif result.type == "INSERT":
+        print("Data inserted successfully.")
+
+    elif result.type == "UPDATE":
+        print("Data updated successfully.")
+
+    elif result.type == "DELETE":
+        print("Data deleted successfully.")
+
+    elif result.type == "DROP":
+        print("Table dropped successfully.")
+
+    else:
+        print(f"Unknown query type: {result.type}")
+
+    print("-" * 50)
