@@ -539,6 +539,7 @@ class QueryExecutor:
             elif query_tree.type == 'project':
                 if query_tree.child and query_tree.child[0].type == 'table':
                     table_name = query_tree.child[0].val
+                    table_data = self.storage_manager.get_table_data(table_name)
                 elif query_tree.child and query_tree.child[0].type == 'limit':
                     limit_value = int(query_tree.child[0].condition)
                     if query_tree.child[0].child and query_tree.child[0].child[0].type == 'table':
@@ -568,28 +569,64 @@ class QueryExecutor:
                                 print(f"Error: Column '{sort_column}' does not exist in table '{table_name}'.")
                         else:
                             print(f"No data found in table '{table_name}'.")
+                    elif query_tree.child[0].child and query_tree.child[0].child[0].type == 'sigma':
+                        table_name = query_tree.child[0].child[0].child[0].val
+                        where_clause = query_tree.child[0].child[0].condition
+                        match = re.match(r"(\w+)\s*([=<>!]+)\s*(.+)", where_clause)
+                        if match:
+                            column_name = match.group(1)
+                            operator = match.group(2)
+                            value = match.group(3)
+                            result_data = self.storage_manager.get_table_data(table_name, Condition(column_name, operator, value))[:limit_value]
+                            schema = self.storage_manager.get_table_schema(table_name)
+                            columns = [attr[0] for attr in schema.get_metadata()]
+                        else:
+                            print("Error: Invalid WHERE clause.")
                     else:
                         print("Error: No valid table node found under limit node.")
                         return [], [], {}
                 elif query_tree.child and query_tree.child[0].type == 'sigma':
                     table_name = query_tree.child[0].child[0].val
+                    column_selected = query_tree.condition
                     where_clause = query_tree.child[0].condition
-                    match = re.match(r"(\w+)\s*([=<>!]+)\s*(.+)", where_clause)
-                    if match:
-                        column_name = match.group(1)
-                        operator = match.group(2)
-                        value = match.group(3)
-                        print("column_name:", column_name)
-                        print("operator:", operator)
-                        print("value:", value)
 
-                        result_data = self.storage_manager.get_table_data(table_name, Condition(column_name, operator, value))
-                        print(Condition(column_name, operator, value))
+                    try:
+                        if where_clause:
+                            comparison_operators = ['<=', '>=', '!=', '==', '=', '<', '>']
+
+                            for op in comparison_operators:
+                                if op in where_clause:
+                                    parts = where_clause.split(op)
+
+                                    operand1 = parts[0].strip()
+                                    operand2 = parts[1].strip()
+
+                                    condition = Condition(operand1, op, operand2)
+
+                                    table_data = self.storage_manager.get_table_data(table_name, condition)
+
+                                    break
+                        else:
+                            table_data = self.storage_manager.get_table_data(table_name)
+
+                        if (len(table_data) == 0):
+                            print(f"No data found in table '{table_name}'.")
+                            return [], [], {}
+                        
                         schema = self.storage_manager.get_table_schema(table_name)
-                        columns = [attr[0] for attr in schema.get_metadata()]
-                    else:
-                        print("Error: Invalid WHERE clause.")
+                        all_columns = [attr[0] for attr in schema.get_metadata()]
+
+                        if column_selected.strip() == "*":
+                            columns = all_columns
+                        else:
+                            column_names = [col.strip() for col in column_selected.split(",")]
+                            if not set(column_names).issubset(all_columns):
+                                print(f"Error: Some specified columns do not exist in table '{table_name}'.")
+                                return [], [], {}
+                    except Exception as e:
+                        print(f"Error: {e}")
                         return [], [], {}
+                
                 elif query_tree.child and query_tree.child[0].type == 'sort':
                     table_name = query_tree.child[0].child[0].val
                     table_data = self.storage_manager.get_table_data(table_name)
@@ -629,8 +666,6 @@ class QueryExecutor:
                         column_mapping[col.strip()] = col.strip()
 
                 columns = column_mapping
-                # Get table data and schema
-                table_data = self.storage_manager.get_table_data(table_name)
                 if table_data:
                     schema = self.storage_manager.get_table_schema(table_name)
                     if query_tree.child and query_tree.child[0].type == 'limit':
@@ -651,7 +686,6 @@ class QueryExecutor:
                     schema = self.storage_manager.get_table_schema(table_name)
                     columns = [attr[0] for attr in schema.get_metadata()]
                     result_data = table_data
-                    # self.display_table_data(result_data, schema)
                 else:
                     print(f"No data found in table '{table_name}'.")
 
@@ -659,7 +693,6 @@ class QueryExecutor:
                 table_name = query_tree.child[0].val
                 where_clause = query_tree.condition
     
-                # Parsing where_clause menggunakan regex
                 match = re.match(r"(\w+)\s*([=<>!]+)\s*(.+)", where_clause)
                 if match:
                     column_name = match.group(1)
@@ -705,9 +738,6 @@ class QueryExecutor:
                         print(f"No data found in table '{table_name}'.")
                 else:
                     print("Error: No valid table node found under sort node.")
-
-
-
 
             return result_data, schema, columns
 
