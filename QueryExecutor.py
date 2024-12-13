@@ -16,7 +16,7 @@ from QueryConcurrencyController import QueryConcurrencyController
 # from Concurrency_Control_Manager.models import Resource
 from utils.models import ExecutionResult, Rows
 from datetime import datetime
-from typing import Tuple
+from typing import Tuple 
 from utils.query import get_query_type, print_tree
 
 import re
@@ -518,6 +518,19 @@ class QueryExecutor:
                             print(f"Error: Column '{sort_column}' does not exist in table '{table_name}'.")
                     else:
                         print(f"No data found in table '{table_name}'.")
+                elif query_tree.child and query_tree.child[0].type == 'sigma':
+                    table_name = query_tree.child[0].child[0].val
+                    where_clause = query_tree.child[0].condition
+                    match = re.match(r"(\w+)\s*([=<>!]+)\s*(.+)", where_clause)
+                    if match:
+                        column_name = match.group(1)
+                        operator = match.group(2)
+                        value = match.group(3)
+                        result_data = self.storage_manager.get_table_data(table_name, Condition(column_name, operator, value))[:limit_value]
+                        schema = self.storage_manager.get_table_schema(table_name)
+                        columns = [attr[0] for attr in schema.get_metadata()]
+                    else:
+                        print("Error: Invalid WHERE clause.")
                 else:
                     print("Error: No valid table node found under limit node.")
             
