@@ -13,10 +13,11 @@ class QueryConcurrencyController:
 
     def __init__(self):
         self.ccm = ConcurrencyControlManager()
-        self.frm = FailureRecoveryManager.FailureRecoveryManager()
+        self.frm = FailureRecoveryManager.FailureRecoveryManager("Failure_Recovery/wal.log")
         self.is_transacting = False
         self.operations = []
         self.queries_operations = []
+        self.failed_operations = []
         self.transact_id = 1
         self.is_rollingback = False
     
@@ -34,6 +35,8 @@ class QueryConcurrencyController:
                 elif response.responseType.name == "ABORT":
                     rollback = self.frm.recover(self.transact_id)
                     self.is_rollingback = True
+                    self.failed_operations.append(ops)
+                    self.ccm.end_transaction(self.transact_id)
                     return rollback
                 else:
                     return "LE WAIT"
@@ -52,6 +55,8 @@ class QueryConcurrencyController:
             elif response.responseType.name == "ABORT":
                 rollback = self.frm.recover(self.transact_id)
                 self.is_rollingback = True
+                self.failed_operations.append(ops)
+                self.ccm.end_transaction(self.transact_id)
                 return rollback
         self.ccm.end_transaction(self.transact_id)
         return "OK"
@@ -66,6 +71,8 @@ class QueryConcurrencyController:
             elif response.responseType.name == "ABORT":
                 rollback = self.frm.recover(self.transact_id)
                 self.is_rollingback = True
+                self.failed_operations.append(ops)
+                self.ccm.end_transaction(self.transact_id)
                 return rollback
         for res_string in table_names:
             ops = Operation(self.transact_id, OperationType.W, f"{res_string}")
@@ -75,8 +82,9 @@ class QueryConcurrencyController:
             elif response.responseType.name == "ABORT":
                 rollback = self.frm.recover(self.transact_id)
                 self.is_rollingback = True
+                self.failed_operations.append(ops)
+                self.ccm.end_transaction(self.transact_id)
                 return rollback
-        self.ccm.end_transaction(self.transact_id)
         return "OK"
     
     def check_for_response_delete(self, table_names: list[str]) -> list | str:
@@ -89,6 +97,8 @@ class QueryConcurrencyController:
             elif response.responseType.name == "ABORT":
                 rollback = self.frm.recover(self.transact_id)
                 self.is_rollingback = True
+                self.failed_operations.append(ops)
+                self.ccm.end_transaction(self.transact_id)
                 return rollback
         for res_string in table_names:
             ops = Operation(self.transact_id, OperationType.W, f"{res_string}")
@@ -98,8 +108,9 @@ class QueryConcurrencyController:
             elif response.responseType.name == "ABORT":
                 rollback = self.frm.recover(self.transact_id)
                 self.is_rollingback = True
+                self.failed_operations.append(ops)
+                self.ccm.end_transaction(self.transact_id)
                 return rollback
-        self.ccm.end_transaction(self.transact_id)
         return "OK"
     
     def end_transaction(self):
@@ -114,3 +125,4 @@ class QueryConcurrencyController:
         )
         self.frm.write_log(res)
         self.is_transacting = False
+        self.ccm.end_transaction(self.transact_id)

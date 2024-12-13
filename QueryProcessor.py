@@ -12,6 +12,23 @@ class QueryProcessor:
         """
         try:
             query_type = get_query_type(query)
+
+            for ops in self.query_executor.failed_queries:
+                if query_type == "SELECT":
+                    success = self.query_executor.execute_select(ops)
+                elif query_type == "INSERT":
+                    success = self.query_executor.execute_insert(ops)
+                elif query_type == "CREATE":
+                    success = self.query_executor.execute_create(ops)
+                elif query_type == "UPDATE":
+                    success = self.query_executor.execute_update(ops)
+                elif query_type == "DELETE":
+                    success = self.query_executor.execute_delete(ops)
+                elif query_type == "DROP":
+                    success = self.query_executor.execute_drop(ops)
+                
+                if success != False:
+                    self.query_executor.failed_queries.remove(ops)
             
             if query_type == "SELECT":
                 success = self.query_executor.execute_select(query)
@@ -34,6 +51,23 @@ class QueryProcessor:
             else:
                 print(f"Unsupported query type: {query_type}")
                 success = False
+
+            for ops in self.query_executor.failed_queries:
+                if query_type == "SELECT":
+                    success = self.query_executor.execute_select(ops)
+                elif query_type == "INSERT":
+                    success = self.query_executor.execute_insert(ops)
+                elif query_type == "CREATE":
+                    success = self.query_executor.execute_create(ops)
+                elif query_type == "UPDATE":
+                    success = self.query_executor.execute_update(ops)
+                elif query_type == "DELETE":
+                    success = self.query_executor.execute_delete(ops)
+                elif query_type == "DROP":
+                    success = self.query_executor.execute_drop(ops)
+
+                if success != False:
+                    self.query_executor.failed_queries.remove(ops)
 
             return success
 

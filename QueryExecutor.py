@@ -29,6 +29,7 @@ class QueryExecutor:
         self.qcc = QueryConcurrencyController()
         self.is_transacting = False
         self.operations = []
+        self.failed_queries = []
         self.transact_id = 0
 
     def execute_select(self, query: str) -> ExecutionResult:
@@ -44,39 +45,39 @@ class QueryExecutor:
             #     for operation in operations:
             #         self.operations.append(operation)
 
+            print_tree(parsed_result.query_tree)
             optimized_tree = optimizer.optimize(parsed_result)
 
             table_name = self.get_table_names(optimized_tree.query_tree) 
             print("table name:", table_name)
             print_tree(optimized_tree.query_tree)
 
-            response = self.qcc.check_for_response_select(table_name)
-
-            print(response)
-
-            if (response != "OK"):
-                print("Response is not OK")
-                res = ExecutionResult(
-                    transaction_id=self.qcc.transact_id,
-                    timestamp=datetime.now(),
-                    type=type,
-                    status="error",
-                    query=query,
-                    previous_data=Rows(data=[], rows_count=0, columns=[]),
-                    new_data=Rows(data=[], rows_count=0, columns=[])
-                )
-                for rollback_query in response:
-                    if self.qcc.is_transacting and self.qcc.is_rollingback:
-                        if (get_query_type(rollback_query) == 'SELECT'):
-                            self.execute_select(rollback_query)
-                        elif (get_query_type(rollback_query) == 'INSERT'):
-                            self.execute_insert(rollback_query)
-                        elif (get_query_type(rollback_query) == 'UPDATE'):
-                            self.execute_update(rollback_query)
-                        elif (get_query_type(rollback_query) == 'DELETE'):
-                            self.execute_delete(rollback_query)
+            if (not self.qcc.is_rollingback):
+                response = self.qcc.check_for_response_select(table_name)
                 self.qcc.is_rollingback = False
-                return res
+                if (response != "OK"):
+                    print("Response is not OK")
+                    res = ExecutionResult(
+                        transaction_id=self.qcc.transact_id,
+                        timestamp=datetime.now(),
+                        type=type,
+                        status="error",
+                        query=query,
+                        previous_data=Rows(data=[], rows_count=0, columns=[]),
+                        new_data=Rows(data=[], rows_count=0, columns=[])
+                    )
+                    self.failed_queries.append(query)
+                    for rollback_query in response:
+                        if self.qcc.is_transacting:
+                            if (get_query_type(rollback_query) == 'SELECT'):
+                                self.execute_select(rollback_query)
+                            elif (get_query_type(rollback_query) == 'INSERT'):
+                                self.execute_insert(rollback_query)
+                            elif (get_query_type(rollback_query) == 'UPDATE'):
+                                self.execute_update(rollback_query)
+                            elif (get_query_type(rollback_query) == 'DELETE'):
+                                self.execute_delete(rollback_query)
+                    return res
 
             result_data, schema, columns = self.execute_query(optimized_tree.query_tree)
 
@@ -125,30 +126,31 @@ class QueryExecutor:
             if not values_list:
                 raise ValueError(f"Error: No valid data to insert into '{table_name}'.")
             
-            response = self.qcc.check_for_response_insert(list(table_name))
-
-            if (response != "OK"):
-                res = ExecutionResult(
-                    transaction_id=self.qcc.transact_id,
-                    timestamp=datetime.now(),
-                    type="UPDATE",
-                    status="error",
-                    query=query,
-                    previous_data=Rows(data=[], rows_count=0, columns=[]),
-                    new_data=Rows(data=[], rows_count=0, columns=[])
-                )
-                for rollback_query in response:
-                    if self.qcc.is_transacting and self.qcc.is_rollingback:
-                        if (get_query_type(rollback_query) == 'SELECT'):
-                            self.execute_select(rollback_query)
-                        elif (get_query_type(rollback_query) == 'INSERT'):
-                            self.execute_insert(rollback_query)
-                        elif (get_query_type(rollback_query) == 'UPDATE'):
-                            self.execute_update(rollback_query)
-                        elif (get_query_type(rollback_query) == 'DELETE'):
-                            self.execute_delete(rollback_query)
+            if (not self.qcc.is_rollingback):
+                response = self.qcc.check_for_response_insert(list(table_name))
                 self.qcc.is_rollingback = False
-                return res
+                if (response != "OK"):
+                    res = ExecutionResult(
+                        transaction_id=self.qcc.transact_id,
+                        timestamp=datetime.now(),
+                        type="UPDATE",
+                        status="error",
+                        query=query,
+                        previous_data=Rows(data=[], rows_count=0, columns=[]),
+                        new_data=Rows(data=[], rows_count=0, columns=[])
+                    )
+                    self.failed_queries.append(query)
+                    for rollback_query in response:
+                        if self.qcc.is_transacting and self.qcc.is_rollingback:
+                            if (get_query_type(rollback_query) == 'SELECT'):
+                                self.execute_select(rollback_query)
+                            elif (get_query_type(rollback_query) == 'INSERT'):
+                                self.execute_insert(rollback_query)
+                            elif (get_query_type(rollback_query) == 'UPDATE'):
+                                self.execute_update(rollback_query)
+                            elif (get_query_type(rollback_query) == 'DELETE'):
+                                self.execute_delete(rollback_query)
+                    return res
             
             self.storage_manager.insert_into_table(table_name, values_list)
             schema = self.storage_manager.get_table_schema(table_name)
@@ -282,30 +284,31 @@ class QueryExecutor:
             except Exception as e:
                 print(f"Error: {e}")
             
-            response = self.qcc.check_for_response_update(list(table_name))
-
-            if (response != "OK"):
-                res = ExecutionResult(
-                    transaction_id=self.qcc.transact_id,
-                    timestamp=datetime.now(),
-                    type="UPDATE",
-                    status="error",
-                    query=query,
-                    previous_data=Rows(data=[], rows_count=0, columns=[]),
-                    new_data=Rows(data=[], rows_count=0, columns=[])
-                )
-                for rollback_query in response:
-                    if self.qcc.is_transacting and self.qcc.is_rollingback:
-                        if (get_query_type(rollback_query) == 'SELECT'):
-                            self.execute_select(rollback_query)
-                        elif (get_query_type(rollback_query) == 'INSERT'):
-                            self.execute_insert(rollback_query)
-                        elif (get_query_type(rollback_query) == 'UPDATE'):
-                            self.execute_update(rollback_query)
-                        elif (get_query_type(rollback_query) == 'DELETE'):
-                            self.execute_delete(rollback_query)
+            if (not self.qcc.is_rollingback):
+                response = self.qcc.check_for_response_update(list(table_name))
                 self.qcc.is_rollingback = False
-                return res
+                if (response != "OK"):
+                    res = ExecutionResult(
+                        transaction_id=self.qcc.transact_id,
+                        timestamp=datetime.now(),
+                        type="UPDATE",
+                        status="error",
+                        query=query,
+                        previous_data=Rows(data=[], rows_count=0, columns=[]),
+                        new_data=Rows(data=[], rows_count=0, columns=[])
+                    )
+                    self.failed_queries.append(query)
+                    for rollback_query in response:
+                        if self.qcc.is_transacting and self.qcc.is_rollingback:
+                            if (get_query_type(rollback_query) == 'SELECT'):
+                                self.execute_select(rollback_query)
+                            elif (get_query_type(rollback_query) == 'INSERT'):
+                                self.execute_insert(rollback_query)
+                            elif (get_query_type(rollback_query) == 'UPDATE'):
+                                self.execute_update(rollback_query)
+                            elif (get_query_type(rollback_query) == 'DELETE'):
+                                self.execute_delete(rollback_query)
+                    return res
 
             schema = self.storage_manager.get_table_schema(table_name)
             print(f"{rows_affected} row(s) updated in '{table_name}'.")
@@ -367,30 +370,31 @@ class QueryExecutor:
             condition = Condition(where_column, operator, where_value)
             schema = self.storage_manager.get_table_schema(table_name)
             
-            response = self.qcc.check_for_response_delete(list(table_name))
-
-            if (response != "OK"):
-                res = ExecutionResult(
-                    transaction_id=self.qcc.transact_id,
-                    timestamp=datetime.now(),
-                    type="DELETE",
-                    status="error",
-                    query=query,
-                    previous_data=Rows(data=[], rows_count=0, columns=[]),
-                    new_data=Rows(data=[], rows_count=0, columns=[])
-                )
-                for rollback_query in response:
-                    if self.qcc.is_transacting and self.qcc.is_rollingback:
-                        if (get_query_type(rollback_query) == 'SELECT'):
-                            self.execute_select(rollback_query)
-                        elif (get_query_type(rollback_query) == 'INSERT'):
-                            self.execute_insert(rollback_query)
-                        elif (get_query_type(rollback_query) == 'UPDATE'):
-                            self.execute_update(rollback_query)
-                        elif (get_query_type(rollback_query) == 'DELETE'):
-                            self.execute_delete(rollback_query)
+            if (self.qcc.is_rollingback):
+                response = self.qcc.check_for_response_delete(list(table_name))
                 self.qcc.is_rollingback = False
-                return res
+                if (response != "OK"):
+                    res = ExecutionResult(
+                        transaction_id=self.qcc.transact_id,
+                        timestamp=datetime.now(),
+                        type="DELETE",
+                        status="error",
+                        query=query,
+                        previous_data=Rows(data=[], rows_count=0, columns=[]),
+                        new_data=Rows(data=[], rows_count=0, columns=[])
+                    )
+                    self.failed_queries.append(query)
+                    for rollback_query in response:
+                        if self.qcc.is_transacting and self.qcc.is_rollingback:
+                            if (get_query_type(rollback_query) == 'SELECT'):
+                                self.execute_select(rollback_query)
+                            elif (get_query_type(rollback_query) == 'INSERT'):
+                                self.execute_insert(rollback_query)
+                            elif (get_query_type(rollback_query) == 'UPDATE'):
+                                self.execute_update(rollback_query)
+                            elif (get_query_type(rollback_query) == 'DELETE'):
+                                self.execute_delete(rollback_query)
+                    return res
 
             rows_affected = self.storage_manager.delete_table_record(table_name, condition)
             print(f"{rows_affected} row(s) deleted from '{table_name}'.")
