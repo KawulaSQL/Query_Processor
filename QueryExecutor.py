@@ -247,9 +247,9 @@ class QueryExecutor:
             if not update_match:
                 raise ValueError("Error: Invalid UPDATE query.")
 
-            table_name = update_match.group(1).strip().lower()
-            set_clause = update_match.group(2).strip()
-            where_clause = update_match.group(3).strip()
+            table_name = update_match.group(1)
+            set_clause = update_match.group(2)
+            where_clause = update_match.group(3)
 
             update_values = {}
             for set_part in set_clause.split(','):
@@ -257,18 +257,30 @@ class QueryExecutor:
                 match = re.match(r"(\w+)\s*=\s*(.+)", set_part)
                 if not match:
                     raise ValueError("Error: Invalid SET clause. Ensure it follows the correct format 'column = value'.")
-                column_name = match.group(1).strip().lower()
+                column_name = match.group(1)
                 value = match.group(2).strip()
                 update_values[column_name] = value
 
-            match = re.match(r"(\w+)\s*([=<>!]+)\s*(.+)", where_clause)
-            if not match:
-                raise ValueError("Error: Invalid WHERE clause. Ensure it follows the correct format 'column operator value'.")
+            try:
+                if where_clause:
+                    comparison_operators = ['<=', '>=', '!=', '==', '=', '<', '>']
 
-            where_column = match.group(1).strip().lower()
-            operator = match.group(2).strip()
-            where_value = match.group(3).strip()
-            condition = Condition(where_column, operator, where_value)
+                    for op in comparison_operators:
+                        if op in where_clause:
+                            parts = where_clause.split(op)
+
+                            operand1 = parts[0].strip()
+                            operand2 = parts[1].strip()
+
+                            condition = Condition(operand1, op, operand2)
+
+                            rows_affected = self.storage_manager.update_table(table_name, update_values, condition)
+                            break
+                else:
+                    rows_affected = self.storage_manager.update_table(table_name, update_values)
+
+            except Exception as e:
+                print(f"Error: {e}")
             
             response = self.qcc.check_for_response_update(list(table_name))
 
@@ -296,8 +308,6 @@ class QueryExecutor:
                 return res
 
             schema = self.storage_manager.get_table_schema(table_name)
-
-            rows_affected = self.storage_manager.update_table(table_name, condition, update_values)
             print(f"{rows_affected} row(s) updated in '{table_name}'.")
 
             columns = [attr[0] for attr in schema.get_metadata()]
