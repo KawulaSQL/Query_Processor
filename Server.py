@@ -8,6 +8,7 @@ from utils.result import ExecutionResult, get_execution_result
 
 SERVER_PORT = 5371
 BASE_PATH = "./Storage_Manager/storage"
+# BASE_PATH = "./db-test"
 HEADER_SIZE = 4
 
 class Server:
@@ -55,11 +56,6 @@ class Server:
     def serve_client(self, client_id, client_socket):
         try:
             while True:
-                # data = client_socket.recv(1024).decode('utf-8')
-                # if not data:
-                #     break
-                # print(f"Client {client_id}: {data}")
-                # self.transaction_manager.process_transaction(client_id, data)
                 query_request = self.receive(client_socket)
                 try:
                     result = self.query_processor.process_query(query_request)

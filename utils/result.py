@@ -110,7 +110,7 @@ def print_execution_result(result: ExecutionResult):
 def get_execution_result(result: ExecutionResult) -> str:
     """Helper function to print ExecutionResult in a formatted manner as a string"""
     ret = "Execution Result:"
-    ret = f"Transaction ID: {result.transaction_id}\nTimestamp: {result.timestamp.strftime('%Y-%m-%d %H:%M:%S')}\nStatus: {result.status}\nQuery: {result.query}\nType: {result.type}\n"
+    ret += f"Transaction ID: {result.transaction_id}\nTimestamp: {result.timestamp.strftime('%Y-%m-%d %H:%M:%S')}\nStatus: {result.status}\nQuery: {result.query}\nType: {result.type}\n"
     ret += "\nPrevious Data:\n"
     if isinstance(result.previous_data, int):
         ret += f"Previous Rows Count: {result.previous_data}"

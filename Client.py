@@ -20,7 +20,7 @@ class Client:
     def send(self, msg):
         msg_length = struct.pack('>I', len(msg))
         self.sock.sendall(msg_length + msg)
-        print(f"Sent message: {msg.decode()}")
+        # print(f"Sent message: {msg.decode()}")
 
     def receive(self) -> str :
         header = self.sock.recv(HEADER_SIZE)
@@ -36,5 +36,5 @@ class Client:
             chunks.append(chunk)
             bytes_recd += len(chunk)
         data = b''.join(chunks).decode()
-        print(f"Received message: {data}")
+        # print(f"Received message: {data}")
         return data

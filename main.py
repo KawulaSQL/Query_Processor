@@ -1,25 +1,39 @@
-from QueryProcessor import QueryProcessor
-from utils.result import ExecutionResult, print_execution_result
+# main.py
+from Client import Client
 
 if __name__ == "__main__":
-    base_path = "./Storage_Manager/storage"
-    query_processor = QueryProcessor(base_path)
+    client = Client()
 
-    print("Welcome to KawulaSQL!")
-    print("Enter your SQL query or type 'exit' to quit.\n")
+    address = input(">>> Connect to KawulaSQL: ")
+    host, port = address.split(':')
 
-    while True:
-        query = input("Please enter your SQL query: ").strip()
+    try:
+        client.connect(host, int(port))
+        print("Connected to address " + address)
+        print("Welcome to KawulaSQL!")
+        print("Enter your SQL query or type 'exit' to quit.\n")
 
-        if query.lower() == "exit":
-            print("Exiting KawulaSQL. Goodbye!")
-            break
+        while True:
+            query = input("Please enter your SQL query: ").strip()
+            dummy = "SELECT * FROM department;"
 
-        try:
-            result = query_processor.process_query(query)
-            if isinstance(result, ExecutionResult):
-                print_execution_result(result)
-            elif not result:
-                print("Unexpected result type.")
-        except Exception as e:
-            print(f"Error processing query: {str(e)}")
+            if query.lower() == "exit":
+                print("Exiting KawulaSQL. Goodbye!")
+                break
+            try:
+                client.send(query.encode())
+                client.send(dummy.encode())
+            except Exception as e:
+                print(f"Error while sending to server: {str(e)}")
+
+            try:
+                response = client.receive()
+
+                print(response)
+
+            except Exception as e:
+                print(f"Server Response Error: {str(e)}")
+
+
+    except Exception as e:
+        print(f">>> Connection Error: {str(e)}")
