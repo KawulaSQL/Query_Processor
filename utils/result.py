@@ -1,3 +1,4 @@
+# result.py
 from utils.models import ExecutionResult
 from Storage_Manager.lib.Schema import Schema
 
@@ -20,6 +21,31 @@ def print_table(data, column_names, aliases):
     print(separator)
     for row in data:
         print(row_format.format(*row))
+
+def format_table(data, column_names, aliases):
+    """Helper function to format a table and return it as a string."""
+    # Calculate column widths
+    column_widths = [len(alias) for alias in aliases]
+    for row in data:
+        column_widths = [
+            max(width, len(str(value)))
+            for width, value in zip(column_widths, row)
+        ]
+    
+    # Create row format and separator
+    row_format = " | ".join(f"{{:<{width}}}" for width in column_widths)
+    separator = "-+-".join("-" * width for width in column_widths)
+    
+    # Build the table into a string
+    output = []
+    output.append(row_format.format(*aliases))  # Add header row
+    output.append(separator)  # Add separator line
+    
+    for row in data:
+        output.append(row_format.format(*row))  # Add data rows
+    
+    # Join the list into a single string and return
+    return "\n".join(output)
 
 def process_columns_and_data(schema, columns, data):
     """Process columns and project data based on column names or aliases."""
@@ -80,6 +106,37 @@ def print_execution_result(result: ExecutionResult):
             print(e)
 
     print("-" * 50)
+
+def get_execution_result(result: ExecutionResult) -> str:
+    """Helper function to print ExecutionResult in a formatted manner as a string"""
+    ret = "Execution Result:"
+    ret = f"Transaction ID: {result.transaction_id}\nTimestamp: {result.timestamp.strftime('%Y-%m-%d %H:%M:%S')}\nStatus: {result.status}\nQuery: {result.query}\nType: {result.type}\n"
+    ret += "\nPrevious Data:\n"
+    if isinstance(result.previous_data, int):
+        ret += f"Previous Rows Count: {result.previous_data}"
+    else:
+        ret += f"Rows Count: {result.previous_data.rows_count}"
+
+    ret += "\n\nNew Data:\n"
+    if isinstance(result.new_data, int):
+        ret += f"New Rows Count: {result.new_data}\n"
+    else:
+        ret += f"Rows Count: {result.new_data.rows_count}\n"
+        ret += f"Schema: {result.new_data.schema}\n"
+        ret += f"Columns: {result.new_data.columns}\n"
+        
+        try:
+            aliases, projected_data = process_columns_and_data(
+                result.new_data.schema, result.new_data.columns, result.new_data.data
+            )
+            # print_table(projected_data, result.new_data.columns, aliases)
+            ret += format_table(projected_data, result.new_data.columns, aliases)
+        except ValueError as e:
+            print(e)
+    ret += "\n"
+    ret += "-" * 50
+    ret += "\n"
+    return ret
 
 def display_result(result: ExecutionResult):
     """Displays execution result based on query type."""
