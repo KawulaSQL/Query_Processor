@@ -13,7 +13,7 @@ from Storage_Manager.lib.Condition import Condition
 # from Concurrency_Control_Manager.models import Operation
 # from Concurrency_Control_Manager.models import CCManagerEnums
 # from Concurrency_Control_Manager.models import Resource
-from bang.bangs import ExecutionResult, Rows
+from utils.models import ExecutionResult, Rows
 from datetime import datetime
 from typing import Tuple
 from utils.query import get_query_type, print_tree
@@ -31,7 +31,7 @@ class QueryExecutor:
 
     def execute_select(self, query: str) -> ExecutionResult:
         try:
-            optimizer = QueryOptimizer(query)
+            optimizer = QueryOptimizer(query, self.storage_manager.get_stats())
             parsed_result = optimizer.parse()
             type = get_query_type(query)
 
@@ -42,12 +42,12 @@ class QueryExecutor:
             #     for operation in operations:
             #         self.operations.append(operation)
 
-            # optimized_tree = optimizer.optimize(parsed_result.query_tree)
-            table_name = self.get_table_names(parsed_result.query_tree) 
-            print("table name:", table_name)
             print_tree(parsed_result.query_tree)
+            optimized_tree = optimizer.optimize(parsed_result)
+            table_name = self.get_table_names(parsed_result.query_tree) 
+            print_tree(optimized_tree.query_tree)
 
-            result_data, schema, columns = self.execute_query(parsed_result.query_tree)
+            result_data, schema, columns = self.execute_query(optimized_tree.query_tree)
 
             timestamp = datetime.now()
             previous_data = Rows(data=[], rows_count=0, schema=[], columns={})

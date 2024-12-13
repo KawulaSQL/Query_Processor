@@ -1,4 +1,4 @@
-from bang.bangs import ExecutionResult
+from utils.models import ExecutionResult
 from Storage_Manager.lib.Schema import Schema
 
 def print_table(data, column_names, aliases):

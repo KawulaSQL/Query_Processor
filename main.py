@@ -2,7 +2,7 @@ from QueryProcessor import QueryProcessor
 from utils.result import ExecutionResult, print_execution_result
 
 if __name__ == "__main__":
-    base_path = "./db-test"
+    base_path = "./Storage_Manager/storage"
     query_processor = QueryProcessor(base_path)
 
     print("Welcome to KawulaSQL!")
