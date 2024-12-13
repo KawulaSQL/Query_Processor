@@ -9,6 +9,7 @@ from Storage_Manager.StorageManager import StorageManager
 from Storage_Manager.lib.Schema import Schema
 from Storage_Manager.lib.Attribute import Attribute
 from Storage_Manager.lib.Condition import Condition
+from QueryConcurrencyController import QueryConcurrencyController
 # from Concurrency_Control_Manager.ConcurrencyControlManager import ConcurrencyControlManager
 # from Concurrency_Control_Manager.models import Operation
 # from Concurrency_Control_Manager.models import CCManagerEnums
@@ -25,6 +26,7 @@ class QueryExecutor:
         self.base_path = base_path
         self.storage_manager = StorageManager(base_path)
         # self.conccurency_control_manager = ConcurrencyControlManager()
+        self.qcc = QueryConcurrencyController()
         self.is_transacting = False
         self.operations = []
         self.transact_id = 0
@@ -42,10 +44,40 @@ class QueryExecutor:
             #     for operation in operations:
             #         self.operations.append(operation)
 
-            print_tree(parsed_result.query_tree)
             optimized_tree = optimizer.optimize(parsed_result)
-            table_name = self.get_table_names(parsed_result.query_tree) 
+
+            table_name = self.get_table_names(optimized_tree.query_tree) 
+            print("table name:", table_name)
             print_tree(optimized_tree.query_tree)
+
+            
+            response = self.qcc.check_for_response_select(table_name)
+
+            print(response)
+
+            if (response != "OK"):
+                print("Response is not OK")
+                res = ExecutionResult(
+                    transaction_id=self.qcc.transact_id,
+                    timestamp=datetime.now(),
+                    type=type,
+                    status="error",
+                    query=query,
+                    previous_data=Rows(data=[], rows_count=0, columns=[]),
+                    new_data=Rows(data=[], rows_count=0, columns=[])
+                )
+                for rollback_query in response:
+                    if self.qcc.is_transacting and self.qcc.is_rollingback:
+                        if (get_query_type(rollback_query) == 'SELECT'):
+                            self.execute_select(rollback_query)
+                        elif (get_query_type(rollback_query) == 'INSERT'):
+                            self.execute_insert(rollback_query)
+                        elif (get_query_type(rollback_query) == 'UPDATE'):
+                            self.execute_update(rollback_query)
+                        elif (get_query_type(rollback_query) == 'DELETE'):
+                            self.execute_delete(rollback_query)
+                self.qcc.is_rollingback = False
+                return res
 
             result_data, schema, columns = self.execute_query(optimized_tree.query_tree)
 
@@ -53,8 +85,8 @@ class QueryExecutor:
             previous_data = Rows(data=[], rows_count=0, schema=[], columns={})
             new_data = Rows(data=result_data, rows_count=len(result_data), schema=schema, columns=columns)
 
-            return ExecutionResult(
-                transaction_id=self.transact_id,
+            res = ExecutionResult(
+                transaction_id=self.qcc.transact_id,
                 timestamp=timestamp,
                 type=type,
                 status="success",
@@ -62,10 +94,12 @@ class QueryExecutor:
                 previous_data=previous_data,
                 new_data=new_data
             )
+
+            return res
         
         except Exception as e:
             return ExecutionResult(
-                transaction_id=self.transact_id,
+                transaction_id=self.qcc.transact_id,
                 timestamp=datetime.now(),
                 type=type,
                 status="error",
@@ -92,6 +126,31 @@ class QueryExecutor:
             if not values_list:
                 raise ValueError(f"Error: No valid data to insert into '{table_name}'.")
             
+            response = self.qcc.check_for_response_insert(list(table_name))
+
+            if (response != "OK"):
+                res = ExecutionResult(
+                    transaction_id=self.qcc.transact_id,
+                    timestamp=datetime.now(),
+                    type="UPDATE",
+                    status="error",
+                    query=query,
+                    previous_data=Rows(data=[], rows_count=0, columns=[]),
+                    new_data=Rows(data=[], rows_count=0, columns=[])
+                )
+                for rollback_query in response:
+                    if self.qcc.is_transacting and self.qcc.is_rollingback:
+                        if (get_query_type(rollback_query) == 'SELECT'):
+                            self.execute_select(rollback_query)
+                        elif (get_query_type(rollback_query) == 'INSERT'):
+                            self.execute_insert(rollback_query)
+                        elif (get_query_type(rollback_query) == 'UPDATE'):
+                            self.execute_update(rollback_query)
+                        elif (get_query_type(rollback_query) == 'DELETE'):
+                            self.execute_delete(rollback_query)
+                self.qcc.is_rollingback = False
+                return res
+            
             self.storage_manager.insert_into_table(table_name, values_list)
             schema = self.storage_manager.get_table_schema(table_name)
             columns = [attr[0] for attr in schema.get_metadata()]
@@ -103,9 +162,9 @@ class QueryExecutor:
                 schema=schema,
                 columns=columns
             )
-            
-            return ExecutionResult(
-                transaction_id=self.transact_id,
+
+            res = ExecutionResult(
+                transaction_id=self.qcc.transact_id,
                 timestamp=timestamp,
                 type="INSERT",
                 status="success",
@@ -113,10 +172,14 @@ class QueryExecutor:
                 previous_data=Rows(data=[], rows_count=0, schema=[], columns=[]),
                 new_data=new_data
             )
+
+            self.qcc.frm.write_log(res)
+            
+            return res
         
         except Exception as e:
             return ExecutionResult(
-                transaction_id=self.transact_id,
+                transaction_id=self.qcc.transact_id,
                 timestamp=datetime.now(),
                 type="INSERT",
                 status="error",
@@ -157,7 +220,7 @@ class QueryExecutor:
             new_data = Rows(data=[], rows_count=0, schema=schema, columns=columns)
 
             return ExecutionResult(
-                transaction_id=self.transact_id,
+                transaction_id=self.qcc.transact_id,
                 timestamp=timestamp,
                 type="CREATE",
                 status="success",
@@ -168,7 +231,7 @@ class QueryExecutor:
 
         except Exception as e:
             return ExecutionResult(
-                transaction_id=self.transact_id,
+                transaction_id=self.qcc.transact_id,
                 timestamp=datetime.now(),
                 type="CREATE",
                 status="error",
@@ -206,6 +269,32 @@ class QueryExecutor:
             operator = match.group(2).strip()
             where_value = match.group(3).strip()
             condition = Condition(where_column, operator, where_value)
+
+            response = self.qcc.check_for_response_update(list(table_name))
+
+            if (response != "OK"):
+                res = ExecutionResult(
+                    transaction_id=self.qcc.transact_id,
+                    timestamp=datetime.now(),
+                    type="UPDATE",
+                    status="error",
+                    query=query,
+                    previous_data=Rows(data=[], rows_count=0, columns=[]),
+                    new_data=Rows(data=[], rows_count=0, columns=[])
+                )
+                for rollback_query in response:
+                    if self.qcc.is_transacting and self.qcc.is_rollingback:
+                        if (get_query_type(rollback_query) == 'SELECT'):
+                            self.execute_select(rollback_query)
+                        elif (get_query_type(rollback_query) == 'INSERT'):
+                            self.execute_insert(rollback_query)
+                        elif (get_query_type(rollback_query) == 'UPDATE'):
+                            self.execute_update(rollback_query)
+                        elif (get_query_type(rollback_query) == 'DELETE'):
+                            self.execute_delete(rollback_query)
+                self.qcc.is_rollingback = False
+                return res
+
             schema = self.storage_manager.get_table_schema(table_name)
 
             rows_affected = self.storage_manager.update_table(table_name, condition, update_values)
@@ -221,8 +310,8 @@ class QueryExecutor:
                 columns=columns
             )
 
-            return ExecutionResult(
-                transaction_id=self.transact_id,
+            res = ExecutionResult(
+                transaction_id=self.qcc.transact_id,
                 timestamp=timestamp,
                 type="UPDATE",
                 status="success",
@@ -230,6 +319,10 @@ class QueryExecutor:
                 previous_data=Rows(data=[], rows_count=0, schema=[], columns=[]),
                 new_data=new_data
             )
+
+            self.qcc.frm.write_log(res)
+
+            return res
 
         except Exception as e:
             print(f"Error: {e}")
@@ -263,6 +356,31 @@ class QueryExecutor:
             condition = Condition(where_column, operator, where_value)
             schema = self.storage_manager.get_table_schema(table_name)
 
+            response = self.qcc.check_for_response_delete(list(table_name))
+
+            if (response != "OK"):
+                res = ExecutionResult(
+                    transaction_id=self.qcc.transact_id,
+                    timestamp=datetime.now(),
+                    type="DELETE",
+                    status="error",
+                    query=query,
+                    previous_data=Rows(data=[], rows_count=0, columns=[]),
+                    new_data=Rows(data=[], rows_count=0, columns=[])
+                )
+                for rollback_query in response:
+                    if self.qcc.is_transacting and self.qcc.is_rollingback:
+                        if (get_query_type(rollback_query) == 'SELECT'):
+                            self.execute_select(rollback_query)
+                        elif (get_query_type(rollback_query) == 'INSERT'):
+                            self.execute_insert(rollback_query)
+                        elif (get_query_type(rollback_query) == 'UPDATE'):
+                            self.execute_update(rollback_query)
+                        elif (get_query_type(rollback_query) == 'DELETE'):
+                            self.execute_delete(rollback_query)
+                self.qcc.is_rollingback = False
+                return res
+
             rows_affected = self.storage_manager.delete_table_record(table_name, condition)
             print(f"{rows_affected} row(s) deleted from '{table_name}'.")
 
@@ -276,7 +394,7 @@ class QueryExecutor:
                 columns=columns
             )
 
-            return ExecutionResult(
+            res = ExecutionResult(
                 transaction_id=self.transact_id,
                 timestamp=timestamp,
                 type="DELETE",
@@ -285,6 +403,10 @@ class QueryExecutor:
                 previous_data=Rows(data=[], rows_count=0, schema=[], columns=[]),
                 new_data=new_data
             )
+
+            self.qcc.frm.write_log(res)
+
+            return res
 
         except Exception as e:
             print(f"Error: {e}")
@@ -331,25 +453,31 @@ class QueryExecutor:
                 previous_data=Rows(data=[], rows_count=0, schema=[], columns=[]),
                 new_data=Rows(data=[], rows_count=0, schema=[], columns=[]),
             )
+    def execute_begin_transaction(self):
+        self.qcc.begin_transaction()
+        # res = ExecutionResult(
+        #     transaction_id=self.qcc.transact_id,
+        #     timestamp=datetime.now(),
+        #     type="BEGIN TRANSACTION",
+        #     status="success",
+        #     query="BEGIN TRANSACTION",
+        #     previous_data=Rows(data=[], rows_count=0, schema=[], columns=[]),
+        #     new_data=Rows(data=[], rows_count=0, schema=[], columns=[])
+        # )
+        # return res
 
-    def begin_transaction(self):
-        self.is_transacting = True
-        print("Transaction started.")
-        # Implement the logic to begin transaction
-
-    def commit(self):
-        print("Transaction committed.")
-        self.transact_id += 1
-        begins = self.conccurency_control_manager.begin_transaction(self.operations)
-        # implement the concurrency control thingy
-        # Implement the logic to commit transaction
-
-    def check_for_response(self, operations: list):
-        self.transact_id += 1
-        begins = self.conccurency_control_manager.begin_transaction(operations)
-        # Implement the concurrency control thingy
-        # response = self.conccurency_control_manager.send_response_to_processor(response)
-        # return response
+    def execute_commit(self):
+        self.qcc.end_transaction()
+        # res = ExecutionResult(
+        #     transaction_id=self.qcc.transact_id,
+        #     timestamp=datetime.now(),
+        #     type="COMMIT",
+        #     status="success",
+        #     query="COMMIT",
+        #     previous_data=Rows(data=[], rows_count=0, schema=[], columns=[]),
+        #     new_data=Rows(data=[], rows_count=0, schema=[], columns=[])
+        # )
+        # return res
 
     def execute_query(self, query_tree: QueryTree) -> Tuple[list, list, map]:
         """
@@ -583,15 +711,3 @@ class QueryExecutor:
             for child in query_tree.child:
                 table_names.extend(self.get_table_names(child))
         return table_names
-    
-    # def convert_to_operation_select(self, table_name: list[str], transact_id: int):
-    #     operations = []
-    #     for table in table_name:
-    #         operations.append(Operation(CCManagerEnums.OperationType.R, f"tx{transact_id}", table))
-    #     return operations
-    
-    # def convert_to_operation_insert(self, table_name: list[str], transact_id: int):
-    #     operations = []
-    #     for table in table_name:
-    #         operations.append(Operation(CCManagerEnums.OperationType.W, f"tx{transact_id}", table))
-    #     return operations
