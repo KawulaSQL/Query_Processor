@@ -19,7 +19,7 @@ if __name__ == "__main__":
             result = query_processor.process_query(query)
             if isinstance(result, ExecutionResult):
                 print_execution_result(result)
-            else:
+            elif not result:
                 print("Unexpected result type.")
         except Exception as e:
             print(f"Error processing query: {str(e)}")

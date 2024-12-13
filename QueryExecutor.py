@@ -50,7 +50,6 @@ class QueryExecutor:
             print("table name:", table_name)
             print_tree(optimized_tree.query_tree)
 
-            
             response = self.qcc.check_for_response_select(table_name)
 
             print(response)
@@ -173,7 +172,8 @@ class QueryExecutor:
                 new_data=new_data
             )
 
-            self.qcc.frm.write_log(res)
+            if (self.qcc.is_transacting):
+                self.qcc.frm.write_log(res)
             
             return res
         
@@ -269,7 +269,7 @@ class QueryExecutor:
             operator = match.group(2).strip()
             where_value = match.group(3).strip()
             condition = Condition(where_column, operator, where_value)
-
+            
             response = self.qcc.check_for_response_update(list(table_name))
 
             if (response != "OK"):
@@ -320,7 +320,8 @@ class QueryExecutor:
                 new_data=new_data
             )
 
-            self.qcc.frm.write_log(res)
+            if (self.qcc.is_transacting):
+                self.qcc.frm.write_log(res)
 
             return res
 
@@ -355,7 +356,7 @@ class QueryExecutor:
             where_value = match.group(3).strip()
             condition = Condition(where_column, operator, where_value)
             schema = self.storage_manager.get_table_schema(table_name)
-
+            
             response = self.qcc.check_for_response_delete(list(table_name))
 
             if (response != "OK"):
@@ -404,7 +405,8 @@ class QueryExecutor:
                 new_data=new_data
             )
 
-            self.qcc.frm.write_log(res)
+            if (self.qcc.is_transacting):
+                self.qcc.frm.write_log(res)
 
             return res
 

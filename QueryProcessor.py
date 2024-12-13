@@ -26,9 +26,11 @@ class QueryProcessor:
             elif query_type == "DROP":
                 success = self.query_executor.execute_drop(query)
             elif query_type == "BEGIN TRANSACTION":
-                success = self.query_executor.begin_transaction()
+                self.query_executor.execute_begin_transaction()
+                success = True
             elif query_type == "COMMIT":
-                success = self.query_executor.commit()
+                self.query_executor.execute_commit()
+                success = True
             else:
                 print(f"Unsupported query type: {query_type}")
                 success = False
